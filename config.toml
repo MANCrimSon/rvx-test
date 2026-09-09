@@ -41,9 +41,7 @@ archive-dlurl = "https://archive.org/download/crimsonman/apks/com.google.android
 # uptodown-dlurl = "https://youtube.en.uptodown.com/android"
 # apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube"
 included-patches = "'Clone app'"
-patcher-args = """
-  -O "Clone app:packageName=app.morphe.android.youtube.test"
-"""
+patcher-args = "--options-file=bin/options.json"
 addon-patches = "bin/crimson-update-check.mpp"
 
 [YouTube-Music-Morphe]
