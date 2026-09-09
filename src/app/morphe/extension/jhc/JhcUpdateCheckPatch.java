@@ -269,7 +269,16 @@ public class JhcUpdateCheckPatch {
         }
     }
 
-    // --- UI DIALOG (Adaptive Portrait / Landscape Bottom Sheet) ---
+    private static boolean isDarkTheme(Activity activity) {
+        try {
+            int uiMode = activity.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
+            return uiMode != Configuration.UI_MODE_NIGHT_NO;
+        } catch (Exception e) {
+            return true;
+        }
+    }
+
+    // --- UI DIALOG (Dynamic Light / Dark Theme & Adaptive Portrait / Landscape) ---
     private static void showDialog(Activity activity, String tag, String version, String patchVersion, String downloadUrl) {
         if (activity == null || activity.isFinishing() || activity.isDestroyed()) {
             return;
@@ -281,12 +290,26 @@ public class JhcUpdateCheckPatch {
 
             DisplayMetrics dm = activity.getResources().getDisplayMetrics();
             float density = dm.density;
-            boolean isLandscape = activity.getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE;
+            boolean dark = isDarkTheme(activity);
+
+            // Palette Definition
+            final int colCardBg = dark ? Color.parseColor("#1C1C1E") : Color.WHITE;
+            final int colBackdrop = dark ? Color.parseColor("#80000000") : Color.parseColor("#50000000");
+            final int colTitle = dark ? Color.WHITE : Color.parseColor("#0F0F0F");
+            final int colSubtitle = dark ? Color.parseColor("#8E8E93") : Color.parseColor("#606060");
+            final int colHandle = dark ? Color.parseColor("#48484A") : Color.parseColor("#D1D1D6");
+            final int colDivider = dark ? Color.parseColor("#2C2C2E") : Color.parseColor("#E5E5EA");
+            final int colBtnBg = dark ? Color.parseColor("#3EA6FF") : Color.parseColor("#065FD4");
+            final int colBtnText = dark ? Color.BLACK : Color.WHITE;
+            final int colSubBtnBg = dark ? Color.parseColor("#2C2C2E") : Color.parseColor("#F2F2F7");
+            final int colSubBtnBorder = dark ? Color.parseColor("#3A3A3C") : Color.parseColor("#E5E5EA");
+            final int colSubBtnText = dark ? Color.parseColor("#E5E5EA") : Color.parseColor("#0F0F0F");
+            final int colAccentText = dark ? Color.parseColor("#3EA6FF") : Color.parseColor("#065FD4");
 
             // Fullscreen backdrop container
             FrameLayout rootFrame = new FrameLayout(activity);
             rootFrame.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-            rootFrame.setBackgroundColor(Color.parseColor("#80000000")); // 50% dark dimming
+            rootFrame.setBackgroundColor(colBackdrop);
             rootFrame.setOnClickListener(v -> dialog.dismiss());
 
             // Bottom sheet card layout
@@ -294,50 +317,13 @@ public class JhcUpdateCheckPatch {
             sheet.setOrientation(LinearLayout.VERTICAL);
             sheet.setClickable(true); // Prevent dismiss on card clicks
 
-            // Padding: more compact in landscape
-            int padHoriz = dp(20, density);
-            int padTop = isLandscape ? dp(10, density) : dp(12, density);
-            int padBottom = isLandscape ? dp(16, density) : dp(28, density);
-            sheet.setPadding(padHoriz, padTop, padHoriz, padBottom);
-
             GradientDrawable sheetBg = new GradientDrawable();
-            sheetBg.setColor(Color.parseColor("#1C1C1E")); // AMOLED Dark
-
-            if (isLandscape) {
-                // All 4 rounded corners in landscape for a neat floating modal look
-                sheetBg.setCornerRadius(dp(20, density));
-            } else {
-                // Top rounded corners in portrait
-                float r = dp(24, density);
-                sheetBg.setCornerRadii(new float[]{r, r, r, r, 0, 0, 0, 0});
-            }
+            sheetBg.setColor(colCardBg);
             sheet.setBackground(sheetBg);
 
-            // Width and positioning
-            int cardWidth;
-            FrameLayout.LayoutParams scrollWrapperLp;
-            if (isLandscape) {
-                // Constrain max width to 520dp or 85% of screen width in landscape
-                cardWidth = Math.min(dm.widthPixels - dp(32, density), dp(520, density));
-                scrollWrapperLp = new FrameLayout.LayoutParams(
-                    cardWidth, 
-                    ViewGroup.LayoutParams.WRAP_CONTENT, 
-                    Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL
-                );
-                scrollWrapperLp.bottomMargin = dp(10, density);
-            } else {
-                cardWidth = ViewGroup.LayoutParams.MATCH_PARENT;
-                scrollWrapperLp = new FrameLayout.LayoutParams(
-                    cardWidth, 
-                    ViewGroup.LayoutParams.WRAP_CONTENT, 
-                    Gravity.BOTTOM
-                );
-            }
-
-            // Wrap in vertical ScrollView so landscape never overflows vertically
+            // ScrollWrapper
             ScrollView scrollWrapper = new ScrollView(activity);
             scrollWrapper.setVerticalScrollBarEnabled(false);
-            scrollWrapper.setLayoutParams(scrollWrapperLp);
 
             // Drag to dismiss touch listener
             View.OnTouchListener dragListener = new View.OnTouchListener() {
@@ -394,21 +380,19 @@ public class JhcUpdateCheckPatch {
 
             // Drag handle
             View handle = new View(activity);
-            LinearLayout.LayoutParams handleLp = new LinearLayout.LayoutParams(dp(44, density), dp(5, density));
+            LinearLayout.LayoutParams handleLp = new LinearLayout.LayoutParams(dp(40, density), dp(4, density));
             handleLp.gravity = Gravity.CENTER_HORIZONTAL;
-            handleLp.bottomMargin = isLandscape ? dp(10, density) : dp(14, density);
             handle.setLayoutParams(handleLp);
             GradientDrawable handleBg = new GradientDrawable();
-            handleBg.setColor(Color.parseColor("#48484A"));
-            handleBg.setCornerRadius(dp(3, density));
+            handleBg.setColor(colHandle);
+            handleBg.setCornerRadius(dp(2, density));
             handle.setBackground(handleBg);
             headerLayout.addView(handle);
 
             // Title
             TextView titleView = new TextView(activity);
             titleView.setText(getString("title"));
-            titleView.setTextColor(Color.WHITE);
-            titleView.setTextSize(isLandscape ? 18 : 20);
+            titleView.setTextColor(colTitle);
             titleView.setTypeface(Typeface.DEFAULT_BOLD);
             headerLayout.addView(titleView);
 
@@ -416,22 +400,14 @@ public class JhcUpdateCheckPatch {
             TextView subView = new TextView(activity);
             String verInfo = version.isEmpty() ? "" : " • YouTube " + version;
             subView.setText(String.format(getString("subtitle_fmt"), tag) + verInfo);
-            subView.setTextColor(Color.parseColor("#8E8E93"));
-            subView.setTextSize(isLandscape ? 13 : 14);
-            LinearLayout.LayoutParams subLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            subLp.topMargin = dp(3, density);
-            subView.setLayoutParams(subLp);
+            subView.setTextColor(colSubtitle);
             headerLayout.addView(subView);
 
             // Subtitle Line 2: Patch Version (if available)
+            TextView patchView = new TextView(activity);
             if (!patchVersion.isEmpty()) {
-                TextView patchView = new TextView(activity);
                 patchView.setText(String.format(getString("patches_fmt"), patchVersion));
-                patchView.setTextColor(Color.parseColor("#8E8E93"));
-                patchView.setTextSize(isLandscape ? 12 : 13);
-                LinearLayout.LayoutParams patchLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-                patchLp.topMargin = dp(2, density);
-                patchView.setLayoutParams(patchLp);
+                patchView.setTextColor(colSubtitle);
                 headerLayout.addView(patchView);
             }
 
@@ -440,11 +416,7 @@ public class JhcUpdateCheckPatch {
             // --- PRIMARY ACTIONS BLOCK (Download & Obtainium) ---
 
             // Main Download Button
-            int btnHeight = isLandscape ? dp(42, density) : dp(48, density);
-            TextView downloadBtn = createButton(activity, getString("download_btn"), Color.parseColor("#3EA6FF"), Color.BLACK, density, isLandscape ? 14 : 15);
-            LinearLayout.LayoutParams dlLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, btnHeight);
-            dlLp.topMargin = isLandscape ? dp(12, density) : dp(16, density);
-            downloadBtn.setLayoutParams(dlLp);
+            TextView downloadBtn = createButton(activity, getString("download_btn"), colBtnBg, colBtnText, density, 15);
             downloadBtn.setOnClickListener(v -> {
                 dialog.dismiss();
                 openUrl(activity, downloadUrl);
@@ -454,22 +426,15 @@ public class JhcUpdateCheckPatch {
             // Obtainium section header
             TextView obtainiumTitle = new TextView(activity);
             obtainiumTitle.setText(getString("obtainium_title"));
-            obtainiumTitle.setTextColor(Color.parseColor("#8E8E93"));
-            obtainiumTitle.setTextSize(isLandscape ? 11 : 12);
-            LinearLayout.LayoutParams obTitleLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            obTitleLp.topMargin = isLandscape ? dp(10, density) : dp(14, density);
-            obtainiumTitle.setLayoutParams(obTitleLp);
+            obtainiumTitle.setTextColor(colSubtitle);
             sheet.addView(obtainiumTitle);
 
             // Obtainium actions row: [ 🚀 Открыть Obtainium ] [ 📲 Импорт профиля ]
             LinearLayout obtainiumRow = new LinearLayout(activity);
             obtainiumRow.setOrientation(LinearLayout.HORIZONTAL);
-            LinearLayout.LayoutParams obLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            obLp.topMargin = isLandscape ? dp(6, density) : dp(8, density);
-            obtainiumRow.setLayoutParams(obLp);
 
             // Left: Open Obtainium App
-            TextView openObtainiumBtn = createSubButton(activity, getString("obtainium_open"), density);
+            TextView openObtainiumBtn = createSubButton(activity, getString("obtainium_open"), colSubBtnBg, colSubBtnBorder, colSubBtnText, density);
             LinearLayout.LayoutParams openLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.15f);
             openLp.rightMargin = dp(6, density);
             openObtainiumBtn.setLayoutParams(openLp);
@@ -480,8 +445,7 @@ public class JhcUpdateCheckPatch {
             obtainiumRow.addView(openObtainiumBtn);
 
             // Right: Import profile
-            TextView importBtn = createSubButton(activity, getString("obtainium_import"), density);
-            importBtn.setTextColor(Color.parseColor("#3EA6FF"));
+            TextView importBtn = createSubButton(activity, getString("obtainium_import"), colSubBtnBg, colSubBtnBorder, colAccentText, density);
             LinearLayout.LayoutParams importLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.85f);
             importBtn.setLayoutParams(importLp);
             importBtn.setOnClickListener(v -> {
@@ -500,11 +464,7 @@ public class JhcUpdateCheckPatch {
 
             // --- DIVIDER ---
             View divider = new View(activity);
-            LinearLayout.LayoutParams divLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1, density));
-            divLp.topMargin = isLandscape ? dp(12, density) : dp(16, density);
-            divLp.bottomMargin = isLandscape ? dp(10, density) : dp(12, density);
-            divider.setLayoutParams(divLp);
-            divider.setBackgroundColor(Color.parseColor("#2C2C2E"));
+            divider.setBackgroundColor(colDivider);
             sheet.addView(divider);
 
             // --- SECONDARY BLOCK: SNOOZE / REMIND LATER (At Bottom) ---
@@ -512,16 +472,12 @@ public class JhcUpdateCheckPatch {
             // Snooze section title
             TextView snoozeLabel = new TextView(activity);
             snoozeLabel.setText(getString("remind_label"));
-            snoozeLabel.setTextColor(Color.parseColor("#8E8E93"));
-            snoozeLabel.setTextSize(isLandscape ? 11 : 12);
+            snoozeLabel.setTextColor(colSubtitle);
             sheet.addView(snoozeLabel);
 
             // Snooze Chips Horizontal Row (1d, 3d, 7d, 14d, 1mo)
             HorizontalScrollView chipsScroll = new HorizontalScrollView(activity);
             chipsScroll.setHorizontalScrollBarEnabled(false);
-            LinearLayout.LayoutParams scrollLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            scrollLp.topMargin = isLandscape ? dp(6, density) : dp(8, density);
-            chipsScroll.setLayoutParams(scrollLp);
 
             LinearLayout chipsRow = new LinearLayout(activity);
             chipsRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -529,7 +485,7 @@ public class JhcUpdateCheckPatch {
             int[] days = {1, 3, 7, 14, 30};
             for (int d : days) {
                 String label = d == 30 ? getString("chip_1mo") : d + " " + getString("chip_day");
-                TextView chip = createChip(activity, label, density);
+                TextView chip = createChip(activity, label, colSubBtnBg, colSubBtnBorder, colSubBtnText, density);
                 chip.setOnClickListener(v -> {
                     snooze(activity, tag, d);
                     dialog.dismiss();
@@ -543,10 +499,8 @@ public class JhcUpdateCheckPatch {
             // Skip this build button
             TextView skipBtn = new TextView(activity);
             skipBtn.setText(getString("skip_btn"));
-            skipBtn.setTextColor(Color.parseColor("#8E8E93"));
-            skipBtn.setTextSize(isLandscape ? 12 : 13);
+            skipBtn.setTextColor(colSubtitle);
             skipBtn.setGravity(Gravity.CENTER);
-            skipBtn.setPadding(0, isLandscape ? dp(8, density) : dp(12, density), 0, dp(4, density));
             skipBtn.setOnClickListener(v -> {
                 SharedPreferences prefs = activity.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
                 prefs.edit().putString(KEY_SKIPPED_TAG, tag).apply();
@@ -558,6 +512,131 @@ public class JhcUpdateCheckPatch {
             scrollWrapper.addView(sheet);
             rootFrame.addView(scrollWrapper);
             dialog.setContentView(rootFrame);
+
+            // Dynamic Layout Updater for both Portrait and Landscape (on launch and rotation)
+            rootFrame.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+                int totalWidth = right - left;
+                int totalHeight = bottom - top;
+                if (totalWidth <= 0 || totalHeight <= 0) return;
+
+                boolean isLandscape = totalWidth > totalHeight;
+
+                if (isLandscape) {
+                    // Landscape: Centered modal card, constrained width, compact vertical padding
+                    int cardWidth = Math.min(totalWidth - dp(32, density), dp(520, density));
+                    int maxAllowedHeight = totalHeight - dp(24, density);
+
+                    FrameLayout.LayoutParams wrapLp = new FrameLayout.LayoutParams(
+                        cardWidth,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        Gravity.CENTER
+                    );
+                    scrollWrapper.setLayoutParams(wrapLp);
+
+                    // Rounded all 4 corners in landscape
+                    sheetBg.setCornerRadius(dp(18, density));
+                    sheet.setPadding(dp(20, density), dp(8, density), dp(20, density), dp(10, density));
+
+                    handleLp.bottomMargin = dp(6, density);
+                    titleView.setTextSize(17);
+
+                    LinearLayout.LayoutParams subLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                    subLp.topMargin = dp(2, density);
+                    subView.setLayoutParams(subLp);
+                    subView.setTextSize(12);
+
+                    if (!patchVersion.isEmpty()) {
+                        LinearLayout.LayoutParams patchLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                        patchLp.topMargin = dp(1, density);
+                        patchView.setLayoutParams(patchLp);
+                        patchView.setTextSize(11);
+                    }
+
+                    LinearLayout.LayoutParams dlLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(40, density));
+                    dlLp.topMargin = dp(8, density);
+                    downloadBtn.setLayoutParams(dlLp);
+                    downloadBtn.setTextSize(13);
+
+                    LinearLayout.LayoutParams obTitleLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                    obTitleLp.topMargin = dp(8, density);
+                    obtainiumTitle.setLayoutParams(obTitleLp);
+                    obtainiumTitle.setTextSize(11);
+
+                    LinearLayout.LayoutParams obRowLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                    obRowLp.topMargin = dp(4, density);
+                    obtainiumRow.setLayoutParams(obRowLp);
+
+                    LinearLayout.LayoutParams divLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1, density));
+                    divLp.topMargin = dp(8, density);
+                    divLp.bottomMargin = dp(6, density);
+                    divider.setLayoutParams(divLp);
+
+                    snoozeLabel.setTextSize(11);
+
+                    LinearLayout.LayoutParams scrollLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                    scrollLp.topMargin = dp(4, density);
+                    chipsScroll.setLayoutParams(scrollLp);
+
+                    skipBtn.setTextSize(12);
+                    skipBtn.setPadding(0, dp(6, density), 0, dp(2, density));
+
+                } else {
+                    // Portrait: Bottom sheet, full width, comfortable padding
+                    FrameLayout.LayoutParams wrapLp = new FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                        Gravity.BOTTOM
+                    );
+                    scrollWrapper.setLayoutParams(wrapLp);
+
+                    float r = dp(24, density);
+                    sheetBg.setCornerRadii(new float[]{r, r, r, r, 0, 0, 0, 0});
+                    sheet.setPadding(dp(20, density), dp(12, density), dp(20, density), dp(28, density));
+
+                    handleLp.bottomMargin = dp(14, density);
+                    titleView.setTextSize(20);
+
+                    LinearLayout.LayoutParams subLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                    subLp.topMargin = dp(4, density);
+                    subView.setLayoutParams(subLp);
+                    subView.setTextSize(14);
+
+                    if (!patchVersion.isEmpty()) {
+                        LinearLayout.LayoutParams patchLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                        patchLp.topMargin = dp(2, density);
+                        patchView.setLayoutParams(patchLp);
+                        patchView.setTextSize(13);
+                    }
+
+                    LinearLayout.LayoutParams dlLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48, density));
+                    dlLp.topMargin = dp(16, density);
+                    downloadBtn.setLayoutParams(dlLp);
+                    downloadBtn.setTextSize(15);
+
+                    LinearLayout.LayoutParams obTitleLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                    obTitleLp.topMargin = dp(14, density);
+                    obtainiumTitle.setLayoutParams(obTitleLp);
+                    obtainiumTitle.setTextSize(12);
+
+                    LinearLayout.LayoutParams obRowLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                    obRowLp.topMargin = dp(8, density);
+                    obtainiumRow.setLayoutParams(obRowLp);
+
+                    LinearLayout.LayoutParams divLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1, density));
+                    divLp.topMargin = dp(16, density);
+                    divLp.bottomMargin = dp(12, density);
+                    divider.setLayoutParams(divLp);
+
+                    snoozeLabel.setTextSize(12);
+
+                    LinearLayout.LayoutParams scrollLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                    scrollLp.topMargin = dp(8, density);
+                    chipsScroll.setLayoutParams(scrollLp);
+
+                    skipBtn.setTextSize(13);
+                    skipBtn.setPadding(0, dp(12, density), 0, dp(4, density));
+                }
+            });
 
             Window window = dialog.getWindow();
             if (window != null) {
@@ -657,18 +736,18 @@ public class JhcUpdateCheckPatch {
         return tv;
     }
 
-    private static TextView createChip(Context context, String text, float density) {
+    private static TextView createChip(Context context, String text, int bgColor, int borderColor, int textColor, float density) {
         TextView tv = new TextView(context);
         tv.setText(text);
-        tv.setTextColor(Color.parseColor("#E5E5EA"));
+        tv.setTextColor(textColor);
         tv.setTextSize(13);
         tv.setGravity(Gravity.CENTER);
         tv.setPadding(dp(14, density), dp(8, density), dp(14, density), dp(8, density));
 
         GradientDrawable gd = new GradientDrawable();
-        gd.setColor(Color.parseColor("#2C2C2E"));
+        gd.setColor(bgColor);
         gd.setCornerRadius(dp(16, density));
-        gd.setStroke(1, Color.parseColor("#3A3A3C"));
+        gd.setStroke(1, borderColor);
         tv.setBackground(gd);
 
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -677,18 +756,19 @@ public class JhcUpdateCheckPatch {
         return tv;
     }
 
-    private static TextView createSubButton(Context context, String text, float density) {
+    private static TextView createSubButton(Context context, String text, int bgColor, int borderColor, int textColor, float density) {
         TextView tv = new TextView(context);
         tv.setText(text);
-        tv.setTextColor(Color.parseColor("#E5E5EA"));
+        tv.setTextColor(textColor);
         tv.setTextSize(12);
         tv.setTypeface(Typeface.DEFAULT_BOLD);
         tv.setGravity(Gravity.CENTER);
         tv.setPadding(dp(8, density), dp(10, density), dp(8, density), dp(10, density));
 
         GradientDrawable gd = new GradientDrawable();
-        gd.setColor(Color.parseColor("#2C2C2E"));
+        gd.setColor(bgColor);
         gd.setCornerRadius(dp(12, density));
+        gd.setStroke(1, borderColor);
         tv.setBackground(gd);
         return tv;
     }
