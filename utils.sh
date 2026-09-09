@@ -768,6 +768,9 @@ patch_apk() {
 			continue
 		fi
 		addon_args+=" -p '$addon'"
+		if [[ "$addon" == *"update-check"* ]]; then
+			addon_args+=" -e 'j-hc Update Check'"
+		fi
 	done
 
 	local cmd="java -jar '$cli_jar' patch '$stock_input' -o '$patched_apk' -p '$patches_jar' $patcher_args${addon_args} --keystore=ks.keystore \
@@ -985,8 +988,12 @@ build_rv() {
 		fi
 
 		local apk_output="${BUILD_DIR}/${app_name_l}-${rv_brand_f}-v${version_f}-${arch_f}.apk"
+		local cur_addon_patches="${args[addon_patches]}"
+		if [ "$build_mode" != "apk" ]; then
+			cur_addon_patches=""
+		fi
 		if [ "${NORB:-}" != true ] || { [ ! -f "$patched_apk" ] && [ ! -f "$apk_output" ]; }; then
-			if ! patch_apk "$stock_apk_to_patch" "$patched_apk" "${patcher_args[*]}" "${args[cli]}" "${args[ptjar]}" "${args[addon_patches]}"; then
+			if ! patch_apk "$stock_apk_to_patch" "$patched_apk" "${patcher_args[*]}" "${args[cli]}" "${args[ptjar]}" "$cur_addon_patches"; then
 				epr "Building '${table}' failed!"
 				mark_failed "$table"
 				return 0

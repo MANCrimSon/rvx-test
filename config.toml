@@ -4,7 +4,7 @@ cli-source = "MorpheApp/morphe-desktop"
 cli-version = "dev"
 
 [YouTube-Extended]
-enabled = true
+enabled = false
 app-name = "YouTube"
 rv-brand = "ReVanced Extended"
 build-mode = "both"
@@ -16,7 +16,7 @@ archive-dlurl = "https://archive.org/download/crimsonman/apks/com.google.android
 # apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube"
 
 [YouTube-Music-Extended]
-enabled = true
+enabled = false
 app-name = "YouTube Music"
 rv-brand = "ReVanced Extended"
 build-mode = "both"
@@ -33,16 +33,21 @@ included-patches = "'Disable music video in album'"
 enabled = true
 app-name = "YouTube"
 rv-brand = "Morphe"
-build-mode = "both"
+build-mode = "apk"
 # version = "21.07.247"
 patches-source = "sashade8-ship-it/dual-vot-patches"
 patches-version = "dev"
 archive-dlurl = "https://archive.org/download/crimsonman/apks/com.google.android.youtube"
 # uptodown-dlurl = "https://youtube.en.uptodown.com/android"
 # apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube"
+included-patches = "'Clone app'"
+patcher-args = """
+  -O "Clone app:packageName=app.morphe.android.youtube.test"
+"""
+addon-patches = "bin/crimson-update-check.mpp"
 
 [YouTube-Music-Morphe]
-enabled = true
+enabled = false
 app-name = "YouTube Music"
 rv-brand = "Morphe"
 build-mode = "both"
