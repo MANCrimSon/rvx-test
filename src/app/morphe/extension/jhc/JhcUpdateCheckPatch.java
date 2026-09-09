@@ -8,6 +8,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
@@ -26,6 +27,7 @@ import android.view.Window;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -62,8 +64,10 @@ public class JhcUpdateCheckPatch {
     private static final long STARTUP_DELAY_MS = 3500L;
     // 0 during testing
     private static final long API_COOLDOWN_MS = 0L;
-    // 0 guarantees that any release triggers update check for testing
+    // 0 for test builds
     private static final int EMBEDDED_BUILD_CODE = 0;
+    // TRUE: always show dialog on every launch for testing (ignores snooze/skip)
+    private static final boolean FORCE_TEST_ALWAYS_SHOW = true;
 
     public static void checkUpdate(Context context) {
         if (context == null) return;
@@ -75,7 +79,7 @@ public class JhcUpdateCheckPatch {
 
                 long now = System.currentTimeMillis();
                 long lastCheck = prefs.getLong(KEY_LAST_CHECK_TIME, 0L);
-                if (API_COOLDOWN_MS > 0 && (now - lastCheck < API_COOLDOWN_MS)) {
+                if (!FORCE_TEST_ALWAYS_SHOW && API_COOLDOWN_MS > 0 && (now - lastCheck < API_COOLDOWN_MS)) {
                     Log.d(TAG, "Cooldown active, skipping check");
                     return;
                 }
@@ -149,27 +153,28 @@ public class JhcUpdateCheckPatch {
                 return;
             }
 
-            // Check if user skipped this specific build
-            String skippedTag = prefs.getString(KEY_SKIPPED_TAG, "");
-            if (targetTag.equals(skippedTag)) {
-                Log.d(TAG, "Build " + targetTag + " was skipped by user");
-                return;
-            }
-
-            // Check if user snoozed this specific build (only in production mode)
-            if (EMBEDDED_BUILD_CODE > 0) {
-                String snoozedTag = prefs.getString(KEY_SNOOZED_TAG, "");
-                long snoozeUntil = prefs.getLong(KEY_SNOOZE_UNTIL, 0L);
-                long now = System.currentTimeMillis();
-                if (targetTag.equals(snoozedTag) && now < snoozeUntil) {
-                    Log.d(TAG, "Build " + targetTag + " is snoozed until " + snoozeUntil);
+            // If not in forced test mode, check snooze and skip
+            if (!FORCE_TEST_ALWAYS_SHOW) {
+                String skippedTag = prefs.getString(KEY_SKIPPED_TAG, "");
+                if (targetTag.equals(skippedTag)) {
+                    Log.d(TAG, "Build " + targetTag + " was skipped by user");
                     return;
                 }
 
-                int remoteBuildCode = parseNumericTag(targetTag);
-                if (remoteBuildCode > 0 && remoteBuildCode <= EMBEDDED_BUILD_CODE) {
-                    Log.d(TAG, "App is up to date (remote: " + remoteBuildCode + ", installed: " + EMBEDDED_BUILD_CODE + ")");
-                    return;
+                if (EMBEDDED_BUILD_CODE > 0) {
+                    String snoozedTag = prefs.getString(KEY_SNOOZED_TAG, "");
+                    long snoozeUntil = prefs.getLong(KEY_SNOOZE_UNTIL, 0L);
+                    long now = System.currentTimeMillis();
+                    if (targetTag.equals(snoozedTag) && now < snoozeUntil) {
+                        Log.d(TAG, "Build " + targetTag + " is snoozed until " + snoozeUntil);
+                        return;
+                    }
+
+                    int remoteBuildCode = parseNumericTag(targetTag);
+                    if (remoteBuildCode > 0 && remoteBuildCode <= EMBEDDED_BUILD_CODE) {
+                        Log.d(TAG, "App is up to date (remote: " + remoteBuildCode + ", installed: " + EMBEDDED_BUILD_CODE + ")");
+                        return;
+                    }
                 }
             }
 
@@ -264,7 +269,7 @@ public class JhcUpdateCheckPatch {
         }
     }
 
-    // --- UI DIALOG (Full-width AMOLED Bottom Sheet) ---
+    // --- UI DIALOG (Adaptive Portrait / Landscape Bottom Sheet) ---
     private static void showDialog(Activity activity, String tag, String version, String patchVersion, String downloadUrl) {
         if (activity == null || activity.isFinishing() || activity.isDestroyed()) {
             return;
@@ -276,6 +281,7 @@ public class JhcUpdateCheckPatch {
 
             DisplayMetrics dm = activity.getResources().getDisplayMetrics();
             float density = dm.density;
+            boolean isLandscape = activity.getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE;
 
             // Fullscreen backdrop container
             FrameLayout rootFrame = new FrameLayout(activity);
@@ -283,24 +289,55 @@ public class JhcUpdateCheckPatch {
             rootFrame.setBackgroundColor(Color.parseColor("#80000000")); // 50% dark dimming
             rootFrame.setOnClickListener(v -> dialog.dismiss());
 
-            // Bottom sheet card
+            // Bottom sheet card layout
             LinearLayout sheet = new LinearLayout(activity);
             sheet.setOrientation(LinearLayout.VERTICAL);
             sheet.setClickable(true); // Prevent dismiss on card clicks
-            sheet.setPadding(dp(20, density), dp(12, density), dp(20, density), dp(28, density));
+
+            // Padding: more compact in landscape
+            int padHoriz = dp(20, density);
+            int padTop = isLandscape ? dp(10, density) : dp(12, density);
+            int padBottom = isLandscape ? dp(16, density) : dp(28, density);
+            sheet.setPadding(padHoriz, padTop, padHoriz, padBottom);
 
             GradientDrawable sheetBg = new GradientDrawable();
             sheetBg.setColor(Color.parseColor("#1C1C1E")); // AMOLED Dark
-            float r = dp(24, density);
-            sheetBg.setCornerRadii(new float[]{r, r, r, r, 0, 0, 0, 0});
+
+            if (isLandscape) {
+                // All 4 rounded corners in landscape for a neat floating modal look
+                sheetBg.setCornerRadius(dp(20, density));
+            } else {
+                // Top rounded corners in portrait
+                float r = dp(24, density);
+                sheetBg.setCornerRadii(new float[]{r, r, r, r, 0, 0, 0, 0});
+            }
             sheet.setBackground(sheetBg);
 
-            FrameLayout.LayoutParams sheetLp = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, 
-                ViewGroup.LayoutParams.WRAP_CONTENT, 
-                Gravity.BOTTOM
-            );
-            sheet.setLayoutParams(sheetLp);
+            // Width and positioning
+            int cardWidth;
+            FrameLayout.LayoutParams scrollWrapperLp;
+            if (isLandscape) {
+                // Constrain max width to 520dp or 85% of screen width in landscape
+                cardWidth = Math.min(dm.widthPixels - dp(32, density), dp(520, density));
+                scrollWrapperLp = new FrameLayout.LayoutParams(
+                    cardWidth, 
+                    ViewGroup.LayoutParams.WRAP_CONTENT, 
+                    Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL
+                );
+                scrollWrapperLp.bottomMargin = dp(10, density);
+            } else {
+                cardWidth = ViewGroup.LayoutParams.MATCH_PARENT;
+                scrollWrapperLp = new FrameLayout.LayoutParams(
+                    cardWidth, 
+                    ViewGroup.LayoutParams.WRAP_CONTENT, 
+                    Gravity.BOTTOM
+                );
+            }
+
+            // Wrap in vertical ScrollView so landscape never overflows vertically
+            ScrollView scrollWrapper = new ScrollView(activity);
+            scrollWrapper.setVerticalScrollBarEnabled(false);
+            scrollWrapper.setLayoutParams(scrollWrapperLp);
 
             // Drag to dismiss touch listener
             View.OnTouchListener dragListener = new View.OnTouchListener() {
@@ -321,7 +358,7 @@ public class JhcUpdateCheckPatch {
                             float dy = rawY - startY;
                             if (dy > dp(6, density)) {
                                 dragging = true;
-                                sheet.setTranslationY(Math.max(0, dy));
+                                scrollWrapper.setTranslationY(Math.max(0, dy));
                             }
                             lastY = rawY;
                             return true;
@@ -329,14 +366,14 @@ public class JhcUpdateCheckPatch {
                         case MotionEvent.ACTION_CANCEL:
                             if (dragging) {
                                 float totalDy = lastY - startY;
-                                if (totalDy > dp(90, density)) {
-                                    sheet.animate()
-                                        .translationY(sheet.getHeight() + dp(40, density))
+                                if (totalDy > dp(80, density)) {
+                                    scrollWrapper.animate()
+                                        .translationY(scrollWrapper.getHeight() + dp(50, density))
                                         .setDuration(180)
                                         .withEndAction(dialog::dismiss)
                                         .start();
                                 } else {
-                                    sheet.animate()
+                                    scrollWrapper.animate()
                                         .translationY(0)
                                         .setDuration(180)
                                         .start();
@@ -359,7 +396,7 @@ public class JhcUpdateCheckPatch {
             View handle = new View(activity);
             LinearLayout.LayoutParams handleLp = new LinearLayout.LayoutParams(dp(44, density), dp(5, density));
             handleLp.gravity = Gravity.CENTER_HORIZONTAL;
-            handleLp.bottomMargin = dp(14, density);
+            handleLp.bottomMargin = isLandscape ? dp(10, density) : dp(14, density);
             handle.setLayoutParams(handleLp);
             GradientDrawable handleBg = new GradientDrawable();
             handleBg.setColor(Color.parseColor("#48484A"));
@@ -371,7 +408,7 @@ public class JhcUpdateCheckPatch {
             TextView titleView = new TextView(activity);
             titleView.setText(getString("title"));
             titleView.setTextColor(Color.WHITE);
-            titleView.setTextSize(20);
+            titleView.setTextSize(isLandscape ? 18 : 20);
             titleView.setTypeface(Typeface.DEFAULT_BOLD);
             headerLayout.addView(titleView);
 
@@ -380,9 +417,9 @@ public class JhcUpdateCheckPatch {
             String verInfo = version.isEmpty() ? "" : " • YouTube " + version;
             subView.setText(String.format(getString("subtitle_fmt"), tag) + verInfo);
             subView.setTextColor(Color.parseColor("#8E8E93"));
-            subView.setTextSize(14);
+            subView.setTextSize(isLandscape ? 13 : 14);
             LinearLayout.LayoutParams subLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            subLp.topMargin = dp(4, density);
+            subLp.topMargin = dp(3, density);
             subView.setLayoutParams(subLp);
             headerLayout.addView(subView);
 
@@ -391,7 +428,7 @@ public class JhcUpdateCheckPatch {
                 TextView patchView = new TextView(activity);
                 patchView.setText(String.format(getString("patches_fmt"), patchVersion));
                 patchView.setTextColor(Color.parseColor("#8E8E93"));
-                patchView.setTextSize(13);
+                patchView.setTextSize(isLandscape ? 12 : 13);
                 LinearLayout.LayoutParams patchLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
                 patchLp.topMargin = dp(2, density);
                 patchView.setLayoutParams(patchLp);
@@ -403,9 +440,10 @@ public class JhcUpdateCheckPatch {
             // --- PRIMARY ACTIONS BLOCK (Download & Obtainium) ---
 
             // Main Download Button
-            TextView downloadBtn = createButton(activity, getString("download_btn"), Color.parseColor("#3EA6FF"), Color.BLACK, density);
-            LinearLayout.LayoutParams dlLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48, density));
-            dlLp.topMargin = dp(16, density);
+            int btnHeight = isLandscape ? dp(42, density) : dp(48, density);
+            TextView downloadBtn = createButton(activity, getString("download_btn"), Color.parseColor("#3EA6FF"), Color.BLACK, density, isLandscape ? 14 : 15);
+            LinearLayout.LayoutParams dlLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, btnHeight);
+            dlLp.topMargin = isLandscape ? dp(12, density) : dp(16, density);
             downloadBtn.setLayoutParams(dlLp);
             downloadBtn.setOnClickListener(v -> {
                 dialog.dismiss();
@@ -417,9 +455,9 @@ public class JhcUpdateCheckPatch {
             TextView obtainiumTitle = new TextView(activity);
             obtainiumTitle.setText(getString("obtainium_title"));
             obtainiumTitle.setTextColor(Color.parseColor("#8E8E93"));
-            obtainiumTitle.setTextSize(12);
+            obtainiumTitle.setTextSize(isLandscape ? 11 : 12);
             LinearLayout.LayoutParams obTitleLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            obTitleLp.topMargin = dp(14, density);
+            obTitleLp.topMargin = isLandscape ? dp(10, density) : dp(14, density);
             obtainiumTitle.setLayoutParams(obTitleLp);
             sheet.addView(obtainiumTitle);
 
@@ -427,7 +465,7 @@ public class JhcUpdateCheckPatch {
             LinearLayout obtainiumRow = new LinearLayout(activity);
             obtainiumRow.setOrientation(LinearLayout.HORIZONTAL);
             LinearLayout.LayoutParams obLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            obLp.topMargin = dp(8, density);
+            obLp.topMargin = isLandscape ? dp(6, density) : dp(8, density);
             obtainiumRow.setLayoutParams(obLp);
 
             // Left: Open Obtainium App
@@ -463,8 +501,8 @@ public class JhcUpdateCheckPatch {
             // --- DIVIDER ---
             View divider = new View(activity);
             LinearLayout.LayoutParams divLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1, density));
-            divLp.topMargin = dp(16, density);
-            divLp.bottomMargin = dp(12, density);
+            divLp.topMargin = isLandscape ? dp(12, density) : dp(16, density);
+            divLp.bottomMargin = isLandscape ? dp(10, density) : dp(12, density);
             divider.setLayoutParams(divLp);
             divider.setBackgroundColor(Color.parseColor("#2C2C2E"));
             sheet.addView(divider);
@@ -475,14 +513,14 @@ public class JhcUpdateCheckPatch {
             TextView snoozeLabel = new TextView(activity);
             snoozeLabel.setText(getString("remind_label"));
             snoozeLabel.setTextColor(Color.parseColor("#8E8E93"));
-            snoozeLabel.setTextSize(12);
+            snoozeLabel.setTextSize(isLandscape ? 11 : 12);
             sheet.addView(snoozeLabel);
 
             // Snooze Chips Horizontal Row (1d, 3d, 7d, 14d, 1mo)
             HorizontalScrollView chipsScroll = new HorizontalScrollView(activity);
             chipsScroll.setHorizontalScrollBarEnabled(false);
             LinearLayout.LayoutParams scrollLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            scrollLp.topMargin = dp(8, density);
+            scrollLp.topMargin = isLandscape ? dp(6, density) : dp(8, density);
             chipsScroll.setLayoutParams(scrollLp);
 
             LinearLayout chipsRow = new LinearLayout(activity);
@@ -506,9 +544,9 @@ public class JhcUpdateCheckPatch {
             TextView skipBtn = new TextView(activity);
             skipBtn.setText(getString("skip_btn"));
             skipBtn.setTextColor(Color.parseColor("#8E8E93"));
-            skipBtn.setTextSize(13);
+            skipBtn.setTextSize(isLandscape ? 12 : 13);
             skipBtn.setGravity(Gravity.CENTER);
-            skipBtn.setPadding(0, dp(12, density), 0, dp(4, density));
+            skipBtn.setPadding(0, isLandscape ? dp(8, density) : dp(12, density), 0, dp(4, density));
             skipBtn.setOnClickListener(v -> {
                 SharedPreferences prefs = activity.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
                 prefs.edit().putString(KEY_SKIPPED_TAG, tag).apply();
@@ -517,7 +555,8 @@ public class JhcUpdateCheckPatch {
             });
             sheet.addView(skipBtn);
 
-            rootFrame.addView(sheet);
+            scrollWrapper.addView(sheet);
+            rootFrame.addView(scrollWrapper);
             dialog.setContentView(rootFrame);
 
             Window window = dialog.getWindow();
@@ -603,11 +642,11 @@ public class JhcUpdateCheckPatch {
         return (int) (dp * density + 0.5f);
     }
 
-    private static TextView createButton(Context context, String text, int bgColor, int textColor, float density) {
+    private static TextView createButton(Context context, String text, int bgColor, int textColor, float density, int textSize) {
         TextView tv = new TextView(context);
         tv.setText(text);
         tv.setTextColor(textColor);
-        tv.setTextSize(15);
+        tv.setTextSize(textSize);
         tv.setTypeface(Typeface.DEFAULT_BOLD);
         tv.setGravity(Gravity.CENTER);
 
