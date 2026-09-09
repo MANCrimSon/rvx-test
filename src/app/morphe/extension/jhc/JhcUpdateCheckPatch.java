@@ -6,7 +6,8 @@ import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
@@ -43,6 +44,7 @@ public class JhcUpdateCheckPatch {
     private static final String TAG = "CrimsonUpdate";
     private static final String PREFS_NAME = "crimson_update_prefs";
     private static final String KEY_SNOOZE_UNTIL = "snooze_until";
+    private static final String KEY_SNOOZED_TAG = "snoozed_tag";
     private static final String KEY_SKIPPED_TAG = "skipped_tag";
     private static final String KEY_LAST_CHECK_TIME = "last_check_time";
     private static final String KEY_LAST_REMOTE_TAG = "last_remote_tag";
@@ -56,11 +58,11 @@ public class JhcUpdateCheckPatch {
         "obtainium://app/%7B%22id%22%3A%22app.morphe.android.youtube.test%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FMANCrimSon%2Frvx-test%22%2C%22author%22%3A%22MANCrimSon%22%2C%22name%22%3A%22YouTube%20Morphe%20%28Test%29%22%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Atrue%2C%5C%22fallbackToOlderReleases%5C%22%3Atrue%2C%5C%22versionDetection%5C%22%3Afalse%2C%5C%22apkFilterRegEx%5C%22%3A%5C%22%5Eyoutube-morphe%5C%22%2C%5C%22autoApkFilterByArch%5C%22%3Afalse%7D%22%7D";
     private static final String OBTAINIUM_DOWNLOAD_URL = "https://github.com/ImranR98/Obtainium/releases/latest";
 
-    // 4 seconds delay to avoid colliding with GmsCore dialogs
-    private static final long STARTUP_DELAY_MS = 4000L;
-    // Cooldown 0 during testing so user can verify dialog on relaunch
+    // 3.5 seconds delay on startup
+    private static final long STARTUP_DELAY_MS = 3500L;
+    // 0 during testing
     private static final long API_COOLDOWN_MS = 0L;
-    // 0 guarantees that any release is detected as an update for testing
+    // 0 guarantees that any release triggers update check for testing
     private static final int EMBEDDED_BUILD_CODE = 0;
 
     public static void checkUpdate(Context context) {
@@ -72,12 +74,6 @@ public class JhcUpdateCheckPatch {
                 SharedPreferences prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
 
                 long now = System.currentTimeMillis();
-                long snoozeUntil = prefs.getLong(KEY_SNOOZE_UNTIL, 0L);
-                if (now < snoozeUntil) {
-                    Log.d(TAG, "Update checks snoozed until: " + snoozeUntil + " (now: " + now + ")");
-                    return;
-                }
-
                 long lastCheck = prefs.getLong(KEY_LAST_CHECK_TIME, 0L);
                 if (API_COOLDOWN_MS > 0 && (now - lastCheck < API_COOLDOWN_MS)) {
                     Log.d(TAG, "Cooldown active, skipping check");
@@ -153,15 +149,25 @@ public class JhcUpdateCheckPatch {
                 return;
             }
 
+            // Check if user skipped this specific build
             String skippedTag = prefs.getString(KEY_SKIPPED_TAG, "");
             if (targetTag.equals(skippedTag)) {
                 Log.d(TAG, "Build " + targetTag + " was skipped by user");
                 return;
             }
 
-            int remoteBuildCode = parseNumericTag(targetTag);
-            if (remoteBuildCode > 0 && EMBEDDED_BUILD_CODE > 0) {
-                if (remoteBuildCode <= EMBEDDED_BUILD_CODE) {
+            // Check if user snoozed this specific build (only in production mode)
+            if (EMBEDDED_BUILD_CODE > 0) {
+                String snoozedTag = prefs.getString(KEY_SNOOZED_TAG, "");
+                long snoozeUntil = prefs.getLong(KEY_SNOOZE_UNTIL, 0L);
+                long now = System.currentTimeMillis();
+                if (targetTag.equals(snoozedTag) && now < snoozeUntil) {
+                    Log.d(TAG, "Build " + targetTag + " is snoozed until " + snoozeUntil);
+                    return;
+                }
+
+                int remoteBuildCode = parseNumericTag(targetTag);
+                if (remoteBuildCode > 0 && remoteBuildCode <= EMBEDDED_BUILD_CODE) {
                     Log.d(TAG, "App is up to date (remote: " + remoteBuildCode + ", installed: " + EMBEDDED_BUILD_CODE + ")");
                     return;
                 }
@@ -404,8 +410,6 @@ public class JhcUpdateCheckPatch {
             downloadBtn.setOnClickListener(v -> {
                 dialog.dismiss();
                 openUrl(activity, downloadUrl);
-                SharedPreferences prefs = activity.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-                prefs.edit().putString(KEY_LAST_REMOTE_TAG, tag).apply();
             });
             sheet.addView(downloadBtn);
 
@@ -489,7 +493,7 @@ public class JhcUpdateCheckPatch {
                 String label = d == 30 ? getString("chip_1mo") : d + " " + getString("chip_day");
                 TextView chip = createChip(activity, label, density);
                 chip.setOnClickListener(v -> {
-                    snooze(activity, d);
+                    snooze(activity, tag, d);
                     dialog.dismiss();
                     showToast(activity, String.format(getString("toast_snoozed"), label));
                 });
@@ -547,17 +551,43 @@ public class JhcUpdateCheckPatch {
         }
     }
 
-    private static void snooze(Context context, int days) {
+    private static void snooze(Context context, String tag, int days) {
         long snoozeTime = System.currentTimeMillis() + (days * 86_400_000L);
         SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        prefs.edit().putLong(KEY_SNOOZE_UNTIL, snoozeTime).apply();
+        prefs.edit()
+            .putLong(KEY_SNOOZE_UNTIL, snoozeTime)
+            .putString(KEY_SNOOZED_TAG, tag)
+            .apply();
     }
 
+    // Opens URL directly in the user's default external browser (Chrome, Firefox, etc.)
+    // bypassing YouTube's in-app Custom Tab / WebView to avoid download freezes
     private static void openUrl(Context context, String url) {
         try {
-            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+            Uri uri = Uri.parse(url);
+            Intent intent = new Intent(Intent.ACTION_VIEW, uri);
+            intent.addCategory(Intent.CATEGORY_BROWSABLE);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+
+            // Resolve default browser package
+            Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://"));
+            PackageManager pm = context.getPackageManager();
+            ResolveInfo resolveInfo = pm.resolveActivity(browserIntent, PackageManager.MATCH_DEFAULT_ONLY);
+
+            if (resolveInfo != null && resolveInfo.activityInfo != null) {
+                String browserPkg = resolveInfo.activityInfo.packageName;
+                if (browserPkg != null && !browserPkg.equals(context.getPackageName()) && !browserPkg.contains("youtube")) {
+                    intent.setPackage(browserPkg);
+                }
+            }
+
             context.startActivity(intent);
+        } catch (ActivityNotFoundException ex) {
+            try {
+                Intent fallback = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                context.startActivity(fallback);
+            } catch (Exception ignored) {}
         } catch (Exception e) {
             Log.e(TAG, "Failed to open url: " + url, e);
         }
@@ -628,12 +658,31 @@ public class JhcUpdateCheckPatch {
         return new String(Character.toChars(codePoint));
     }
 
-    // --- MULTILINGUAL DICTIONARY (15+ languages) ---
+    // --- MULTILINGUAL DICTIONARY (Ukrainian, Russian, English + 13 others) ---
     private static String getString(String key) {
         String lang = Locale.getDefault().getLanguage().toLowerCase(Locale.ROOT);
 
-        // Russian, Ukrainian, Belarusian, Kazakh
-        if (lang.equals("ru") || lang.equals("uk") || lang.equals("be") || lang.equals("kk")) {
+        // Ukrainian (full dedicated translation)
+        if (lang.equals("uk") || lang.equals("ua")) {
+            switch (key) {
+                case "title": return emoji(0x1F680) + "  Доступне оновлення";
+                case "subtitle_fmt": return "Збірка %s";
+                case "patches_fmt": return "Патчі: %s";
+                case "download_btn": return emoji(0x1F4E5) + "  ЗАВАНТАЖИТИ APK";
+                case "obtainium_title": return emoji(0x1F4E6) + "  Оновлення через Obtainium:";
+                case "obtainium_open": return emoji(0x1F680) + " Відкрити Obtainium";
+                case "obtainium_import": return emoji(0x1F4F2) + " Імпорт профілю";
+                case "remind_label": return "\u23F1  Нагадати пізніше:";
+                case "chip_day": return "дн";
+                case "chip_1mo": return "1 місяць";
+                case "skip_btn": return "\u23ED  Пропустити цю збірку";
+                case "toast_snoozed": return "Нагадування відкладено на %s";
+                case "toast_skipped": return "Збірку %s пропущено";
+                case "toast_install_obtainium": return "Встановіть Obtainium для автооновлень";
+            }
+        }
+        // Russian, Belarusian, Kazakh
+        else if (lang.equals("ru") || lang.equals("be") || lang.equals("kk")) {
             switch (key) {
                 case "title": return emoji(0x1F680) + "  Доступно обновление";
                 case "subtitle_fmt": return "Сборка %s";
