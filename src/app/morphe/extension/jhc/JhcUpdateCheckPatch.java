@@ -21,8 +21,9 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
+import android.widget.FrameLayout;
+import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -52,12 +53,12 @@ public class JhcUpdateCheckPatch {
         "obtainium://app/%7B%22id%22%3A%22app.morphe.android.youtube.test%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FMANCrimSon%2Frvx-test%22%2C%22author%22%3A%22MANCrimSon%22%2C%22name%22%3A%22YouTube%20Morphe%20%28Test%29%22%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Atrue%2C%5C%22fallbackToOlderReleases%5C%22%3Atrue%2C%5C%22versionDetection%5C%22%3Afalse%2C%5C%22apkFilterRegEx%5C%22%3A%5C%22%5Eyoutube-morphe%5C%22%2C%5C%22autoApkFilterByArch%5C%22%3Afalse%7D%22%7D";
     private static final String OBTAINIUM_DOWNLOAD_URL = "https://github.com/ImranR98/Obtainium/releases/latest";
 
-    // 5 seconds delay on app launch to avoid colliding with GmsCore / MicroG dialogs
-    private static final long STARTUP_DELAY_MS = 5000L;
-    // 1 hour cooldown between GitHub API network queries
-    private static final long API_COOLDOWN_MS = 3600_000L;
-    // Current build code (for rvx-test: build 8 is previous, next build 9 will trigger update)
-    private static final int EMBEDDED_BUILD_CODE = 8;
+    // 4 seconds delay to avoid colliding with GmsCore dialogs
+    private static final long STARTUP_DELAY_MS = 4000L;
+    // Cooldown 0 during testing so user can verify dialog on relaunch
+    private static final long API_COOLDOWN_MS = 0L;
+    // 0 guarantees that any release (e.g. 10, 11) is detected as an update for testing
+    private static final int EMBEDDED_BUILD_CODE = 0;
 
     public static void checkUpdate(Context context) {
         if (context == null) return;
@@ -75,7 +76,7 @@ public class JhcUpdateCheckPatch {
                 }
 
                 long lastCheck = prefs.getLong(KEY_LAST_CHECK_TIME, 0L);
-                if (now - lastCheck < API_COOLDOWN_MS) {
+                if (API_COOLDOWN_MS > 0 && (now - lastCheck < API_COOLDOWN_MS)) {
                     Log.d(TAG, "Cooldown active, skipping check");
                     return;
                 }
@@ -115,13 +116,11 @@ public class JhcUpdateCheckPatch {
             reader.close();
             conn.disconnect();
 
-            // Record check time
             prefs.edit().putLong(KEY_LAST_CHECK_TIME, System.currentTimeMillis()).apply();
 
             JSONArray releases = new JSONArray(sb.toString());
             if (releases.length() == 0) return;
 
-            // Iterate releases from latest to older (fallbackToOlderReleases)
             String targetTag = null;
             String downloadUrl = null;
             String appVersion = "";
@@ -148,25 +147,16 @@ public class JhcUpdateCheckPatch {
                 return;
             }
 
-            // Check if user skipped this build
             String skippedTag = prefs.getString(KEY_SKIPPED_TAG, "");
             if (targetTag.equals(skippedTag)) {
                 Log.d(TAG, "Build " + targetTag + " was skipped by user");
                 return;
             }
 
-            // Compare with current installed build/tag
-            // For rvx-test: tags are numeric increments (6, 7, 8, 9...)
             int remoteBuildCode = parseNumericTag(targetTag);
             if (remoteBuildCode > 0 && EMBEDDED_BUILD_CODE > 0) {
                 if (remoteBuildCode <= EMBEDDED_BUILD_CODE) {
                     Log.d(TAG, "App is up to date (remote: " + remoteBuildCode + ", installed: " + EMBEDDED_BUILD_CODE + ")");
-                    return;
-                }
-            } else {
-                String lastSeenTag = prefs.getString(KEY_LAST_REMOTE_TAG, "");
-                if (targetTag.equals(lastSeenTag)) {
-                    Log.d(TAG, "Tag " + targetTag + " already seen");
                     return;
                 }
             }
@@ -204,7 +194,6 @@ public class JhcUpdateCheckPatch {
             String name = asset.optString("name", "").toLowerCase(Locale.ROOT);
             String url = asset.optString("browser_download_url", "");
 
-            // Look for YouTube APK (not module zip)
             if (!name.endsWith(".apk") || !name.contains("youtube") || name.contains("module")) {
                 continue;
             }
@@ -244,59 +233,56 @@ public class JhcUpdateCheckPatch {
         }
     }
 
-    private static int getCurrentBuildCode(Context context) {
-        try {
-            PackageInfo pInfo = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
-            return (int) pInfo.versionCode;
-        } catch (Exception e) {
-            return 0;
-        }
-    }
-
-    // --- UI DIALOG ---
+    // --- UI DIALOG (Full-width AMOLED Bottom Sheet) ---
     private static void showDialog(Activity activity, String tag, String version, String downloadUrl) {
         if (activity == null || activity.isFinishing() || activity.isDestroyed()) {
             return;
         }
 
         try {
-            Dialog dialog = new Dialog(activity);
+            // Use Theme_Translucent_NoTitleBar to avoid floating dialog sizing bugs
+            Dialog dialog = new Dialog(activity, android.R.style.Theme_Translucent_NoTitleBar);
             dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
-
-            Window window = dialog.getWindow();
-            if (window != null) {
-                window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-                window.setGravity(Gravity.BOTTOM);
-                window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            }
 
             DisplayMetrics dm = activity.getResources().getDisplayMetrics();
             float density = dm.density;
 
-            // Root bottom sheet layout
-            LinearLayout root = new LinearLayout(activity);
-            root.setOrientation(LinearLayout.VERTICAL);
-            root.setPadding(dp(20, density), dp(12, density), dp(20, density), dp(24, density));
+            // Fullscreen backdrop container
+            FrameLayout rootFrame = new FrameLayout(activity);
+            rootFrame.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            rootFrame.setBackgroundColor(Color.parseColor("#80000000")); // 50% dark dimming
+            rootFrame.setOnClickListener(v -> dialog.dismiss());
 
-            GradientDrawable bg = new GradientDrawable();
-            bg.setColor(Color.parseColor("#1C1C1E")); // Deep Dark AMOLED
-            bg.setCornerRadii(new float[]{
-                dp(28, density), dp(28, density),
-                dp(28, density), dp(28, density),
-                0, 0, 0, 0
-            });
-            root.setBackground(bg);
+            // Bottom sheet card
+            LinearLayout sheet = new LinearLayout(activity);
+            sheet.setOrientation(LinearLayout.VERTICAL);
+            sheet.setClickable(true); // Prevent dismiss on card clicks
+            sheet.setPadding(dp(20, density), dp(12, density), dp(20, density), dp(28, density));
 
-            // Drag handle indicator
+            GradientDrawable sheetBg = new GradientDrawable();
+            sheetBg.setColor(Color.parseColor("#1C1C1E")); // AMOLED Dark
+            float r = dp(24, density);
+            sheetBg.setCornerRadii(new float[]{r, r, r, r, 0, 0, 0, 0});
+            sheet.setBackground(sheetBg);
+
+            FrameLayout.LayoutParams sheetLp = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 
+                ViewGroup.LayoutParams.WRAP_CONTENT, 
+                Gravity.BOTTOM
+            );
+            sheet.setLayoutParams(sheetLp);
+
+            // Drag handle
             View handle = new View(activity);
-            LinearLayout.LayoutParams handleLp = new LinearLayout.LayoutParams(dp(44, density), dp(4, density));
+            LinearLayout.LayoutParams handleLp = new LinearLayout.LayoutParams(dp(40, density), dp(4, density));
             handleLp.gravity = Gravity.CENTER_HORIZONTAL;
             handleLp.bottomMargin = dp(16, density);
+            handle.setLayoutParams(handleLp);
             GradientDrawable handleBg = new GradientDrawable();
             handleBg.setColor(Color.parseColor("#48484A"));
             handleBg.setCornerRadius(dp(2, density));
             handle.setBackground(handleBg);
-            root.addView(handle);
+            sheet.addView(handle);
 
             // Title
             TextView titleView = new TextView(activity);
@@ -304,7 +290,7 @@ public class JhcUpdateCheckPatch {
             titleView.setTextColor(Color.WHITE);
             titleView.setTextSize(20);
             titleView.setTypeface(Typeface.DEFAULT_BOLD);
-            root.addView(titleView);
+            sheet.addView(titleView);
 
             // Subtitle
             TextView subView = new TextView(activity);
@@ -316,7 +302,7 @@ public class JhcUpdateCheckPatch {
             subLp.topMargin = dp(4, density);
             subLp.bottomMargin = dp(18, density);
             subView.setLayoutParams(subLp);
-            root.addView(subView);
+            sheet.addView(subView);
 
             // Main Download Button
             TextView downloadBtn = createButton(activity, getString("download_btn"), Color.parseColor("#3EA6FF"), Color.BLACK, density);
@@ -326,7 +312,7 @@ public class JhcUpdateCheckPatch {
                 SharedPreferences prefs = activity.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
                 prefs.edit().putString(KEY_LAST_REMOTE_TAG, tag).apply();
             });
-            root.addView(downloadBtn);
+            sheet.addView(downloadBtn);
 
             // Snooze section title
             TextView snoozeLabel = new TextView(activity);
@@ -337,11 +323,14 @@ public class JhcUpdateCheckPatch {
             snoozeLp.topMargin = dp(16, density);
             snoozeLp.bottomMargin = dp(8, density);
             snoozeLabel.setLayoutParams(snoozeLp);
-            root.addView(snoozeLabel);
+            sheet.addView(snoozeLabel);
 
-            // Snooze Chips Row (1d, 3d, 7d, 14d, 1mo)
-            ScrollView chipsScroll = new ScrollView(activity);
+            // Snooze Chips Horizontal Row (1d, 3d, 7d, 14d, 1mo)
+            HorizontalScrollView chipsScroll = new HorizontalScrollView(activity);
             chipsScroll.setHorizontalScrollBarEnabled(false);
+            LinearLayout.LayoutParams scrollLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            chipsScroll.setLayoutParams(scrollLp);
+
             LinearLayout chipsRow = new LinearLayout(activity);
             chipsRow.setOrientation(LinearLayout.HORIZONTAL);
 
@@ -357,7 +346,7 @@ public class JhcUpdateCheckPatch {
                 chipsRow.addView(chip);
             }
             chipsScroll.addView(chipsRow);
-            root.addView(chipsScroll);
+            sheet.addView(chipsScroll);
 
             // Skip this build button
             TextView skipBtn = new TextView(activity);
@@ -365,41 +354,41 @@ public class JhcUpdateCheckPatch {
             skipBtn.setTextColor(Color.parseColor("#8E8E93"));
             skipBtn.setTextSize(13);
             skipBtn.setGravity(Gravity.CENTER);
-            skipBtn.setPadding(0, dp(10, density), 0, dp(10, density));
+            skipBtn.setPadding(0, dp(12, density), 0, dp(12, density));
             skipBtn.setOnClickListener(v -> {
                 SharedPreferences prefs = activity.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
                 prefs.edit().putString(KEY_SKIPPED_TAG, tag).apply();
                 dialog.dismiss();
                 showToast(activity, String.format(getString("toast_skipped"), tag));
             });
-            root.addView(skipBtn);
+            sheet.addView(skipBtn);
 
             // Divider
             View divider = new View(activity);
-            LinearLayout.LayoutParams divLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1);
-            divLp.topMargin = dp(8, density);
+            LinearLayout.LayoutParams divLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1, density));
+            divLp.topMargin = dp(4, density);
             divLp.bottomMargin = dp(14, density);
             divider.setLayoutParams(divLp);
             divider.setBackgroundColor(Color.parseColor("#2C2C2E"));
-            root.addView(divider);
+            sheet.addView(divider);
 
             // Obtainium section header
             TextView obtainiumTitle = new TextView(activity);
             obtainiumTitle.setText(getString("obtainium_title"));
             obtainiumTitle.setTextColor(Color.parseColor("#8E8E93"));
             obtainiumTitle.setTextSize(12);
-            root.addView(obtainiumTitle);
+            sheet.addView(obtainiumTitle);
 
-            // Obtainium actions row: [ ⏸ Скрыть на 1 мес (уже в Obtainium) ] [ 📲 Импорт профиля ]
+            // Obtainium actions row: [ ⏸ Не напоминать (1 мес) ] [ 📲 Импорт профиля ]
             LinearLayout obtainiumRow = new LinearLayout(activity);
             obtainiumRow.setOrientation(LinearLayout.HORIZONTAL);
             LinearLayout.LayoutParams obLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             obLp.topMargin = dp(8, density);
             obtainiumRow.setLayoutParams(obLp);
 
-            // Left: Hide for 1 month (already in Obtainium)
+            // Left: Hide for 1 month
             TextView hideBtn = createSubButton(activity, getString("obtainium_hide"), density);
-            LinearLayout.LayoutParams hideLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.2f);
+            LinearLayout.LayoutParams hideLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.15f);
             hideLp.rightMargin = dp(6, density);
             hideBtn.setLayoutParams(hideLp);
             hideBtn.setOnClickListener(v -> {
@@ -412,7 +401,7 @@ public class JhcUpdateCheckPatch {
             // Right: Import profile
             TextView importBtn = createSubButton(activity, getString("obtainium_import"), density);
             importBtn.setTextColor(Color.parseColor("#3EA6FF"));
-            LinearLayout.LayoutParams importLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.9f);
+            LinearLayout.LayoutParams importLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.85f);
             importBtn.setLayoutParams(importLp);
             importBtn.setOnClickListener(v -> {
                 dialog.dismiss();
@@ -427,9 +416,17 @@ public class JhcUpdateCheckPatch {
             });
             obtainiumRow.addView(importBtn);
 
-            root.addView(obtainiumRow);
+            sheet.addView(obtainiumRow);
 
-            dialog.setContentView(root);
+            rootFrame.addView(sheet);
+            dialog.setContentView(rootFrame);
+
+            Window window = dialog.getWindow();
+            if (window != null) {
+                window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+                window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+            }
+
             dialog.show();
         } catch (Throwable t) {
             Log.e(TAG, "Error displaying update dialog", t);
@@ -486,7 +483,7 @@ public class JhcUpdateCheckPatch {
         tv.setTextColor(Color.parseColor("#E5E5EA"));
         tv.setTextSize(13);
         tv.setGravity(Gravity.CENTER);
-        tv.setPadding(dp(12, density), dp(7, density), dp(12, density), dp(7, density));
+        tv.setPadding(dp(14, density), dp(8, density), dp(14, density), dp(8, density));
 
         GradientDrawable gd = new GradientDrawable();
         gd.setColor(Color.parseColor("#2C2C2E"));
@@ -495,7 +492,7 @@ public class JhcUpdateCheckPatch {
         tv.setBackground(gd);
 
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        lp.rightMargin = dp(6, density);
+        lp.rightMargin = dp(8, density);
         tv.setLayoutParams(lp);
         return tv;
     }
@@ -516,22 +513,26 @@ public class JhcUpdateCheckPatch {
         return tv;
     }
 
+    private static String emoji(int codePoint) {
+        return new String(Character.toChars(codePoint));
+    }
+
     // --- MULTILINGUAL DICTIONARY ---
     private static String getString(String key) {
         String lang = Locale.getDefault().getLanguage().toLowerCase(Locale.ROOT);
 
         if (lang.equals("ru") || lang.equals("uk") || lang.equals("be") || lang.equals("kk")) {
             switch (key) {
-                case "title": return "🚀  Доступно обновление";
+                case "title": return emoji(0x1F680) + "  Доступно обновление";
                 case "subtitle_fmt": return "Сборка %s";
-                case "download_btn": return "📥  СКАЧАТЬ APK";
-                case "remind_label": return "⏱  Напомнить через:";
+                case "download_btn": return emoji(0x1F4E5) + "  СКАЧАТЬ APK";
+                case "remind_label": return "\u23F1  Напомнить через:";
                 case "chip_day": return "дн";
                 case "chip_1mo": return "1 месяц";
-                case "skip_btn": return "⏭  Пропустить этот билд";
-                case "obtainium_title": return "📦  Обновляетесь через Obtainium?";
-                case "obtainium_hide": return "⏸ Не напоминать (1 мес)";
-                case "obtainium_import": return "📲 Импорт профиля";
+                case "skip_btn": return "\u23ED  Пропустить этот билд";
+                case "obtainium_title": return emoji(0x1F4E6) + "  Обновляетесь через Obtainium?";
+                case "obtainium_hide": return "\u23F8 Не напоминать (1 мес)";
+                case "obtainium_import": return emoji(0x1F4F2) + " Импорт профиля";
                 case "toast_snoozed": return "Напоминание отложено на %s";
                 case "toast_skipped": return "Билд %s пропущен";
                 case "toast_obtainium": return "Уведомления скрыты на 1 месяц";
@@ -539,16 +540,16 @@ public class JhcUpdateCheckPatch {
             }
         } else if (lang.equals("es")) {
             switch (key) {
-                case "title": return "🚀  Actualización disponible";
+                case "title": return emoji(0x1F680) + "  Actualización disponible";
                 case "subtitle_fmt": return "Versión %s";
-                case "download_btn": return "📥  DESCARGAR APK";
-                case "remind_label": return "⏱  Recordar en:";
+                case "download_btn": return emoji(0x1F4E5) + "  DESCARGAR APK";
+                case "remind_label": return "\u23F1  Recordar en:";
                 case "chip_day": return "d";
                 case "chip_1mo": return "1 mes";
-                case "skip_btn": return "⏭  Omitir esta versión";
-                case "obtainium_title": return "📦  ¿Actualizas con Obtainium?";
-                case "obtainium_hide": return "⏸ No recordar (1 mes)";
-                case "obtainium_import": return "📲 Importar perfil";
+                case "skip_btn": return "\u23ED  Omitir esta versión";
+                case "obtainium_title": return emoji(0x1F4E6) + "  ¿Actualizas con Obtainium?";
+                case "obtainium_hide": return "\u23F8 No recordar (1 mes)";
+                case "obtainium_import": return emoji(0x1F4F2) + " Importar perfil";
                 case "toast_snoozed": return "Recordatorio pospuesto por %s";
                 case "toast_skipped": return "Versión %s omitida";
                 case "toast_obtainium": return "Notificaciones pausadas por 1 mes";
@@ -556,16 +557,16 @@ public class JhcUpdateCheckPatch {
             }
         } else if (lang.equals("pt")) {
             switch (key) {
-                case "title": return "🚀  Atualização disponível";
+                case "title": return emoji(0x1F680) + "  Atualização disponível";
                 case "subtitle_fmt": return "Versão %s";
-                case "download_btn": return "📥  BAIXAR APK";
-                case "remind_label": return "⏱  Lembrar em:";
+                case "download_btn": return emoji(0x1F4E5) + "  BAIXAR APK";
+                case "remind_label": return "\u23F1  Lembrar em:";
                 case "chip_day": return "d";
                 case "chip_1mo": return "1 mês";
-                case "skip_btn": return "⏭  Pular esta versão";
-                case "obtainium_title": return "📦  Atualizando via Obtainium?";
-                case "obtainium_hide": return "⏸ Não lembrar (1 mês)";
-                case "obtainium_import": return "📲 Importar perfil";
+                case "skip_btn": return "\u23ED  Pular esta versão";
+                case "obtainium_title": return emoji(0x1F4E6) + "  Atualizando via Obtainium?";
+                case "obtainium_hide": return "\u23F8 Não lembrar (1 mês)";
+                case "obtainium_import": return emoji(0x1F4F2) + " Importar perfil";
                 case "toast_snoozed": return "Lembrete adiado por %s";
                 case "toast_skipped": return "Versão %s pulada";
                 case "toast_obtainium": return "Notificações pausadas por 1 mês";
@@ -573,16 +574,16 @@ public class JhcUpdateCheckPatch {
             }
         } else if (lang.equals("de")) {
             switch (key) {
-                case "title": return "🚀  Update verfügbar";
+                case "title": return emoji(0x1F680) + "  Update verfügbar";
                 case "subtitle_fmt": return "Build %s";
-                case "download_btn": return "📥  APK HERUNTERLADEN";
-                case "remind_label": return "⏱  Erinnern in:";
+                case "download_btn": return emoji(0x1F4E5) + "  APK HERUNTERLADEN";
+                case "remind_label": return "\u23F1  Erinnern in:";
                 case "chip_day": return "T";
                 case "chip_1mo": return "1 Monat";
-                case "skip_btn": return "⏭  Diesen Build überspringen";
-                case "obtainium_title": return "📦  Aktualisierung über Obtainium?";
-                case "obtainium_hide": return "⏸ Nicht erinnern (1 Monat)";
-                case "obtainium_import": return "📲 Profil importieren";
+                case "skip_btn": return "\u23ED  Diesen Build überspringen";
+                case "obtainium_title": return emoji(0x1F4E6) + "  Aktualisierung über Obtainium?";
+                case "obtainium_hide": return "\u23F8 Nicht erinnern (1 Monat)";
+                case "obtainium_import": return emoji(0x1F4F2) + " Profil importieren";
                 case "toast_snoozed": return "Erinnerung verschoben um %s";
                 case "toast_skipped": return "Build %s übersprungen";
                 case "toast_obtainium": return "Benachrichtigungen für 1 Monat stumm";
@@ -592,16 +593,16 @@ public class JhcUpdateCheckPatch {
 
         // English default
         switch (key) {
-            case "title": return "🚀  Update Available";
+            case "title": return emoji(0x1F680) + "  Update Available";
             case "subtitle_fmt": return "Build %s";
-            case "download_btn": return "📥  DOWNLOAD APK";
-            case "remind_label": return "⏱  Remind me in:";
+            case "download_btn": return emoji(0x1F4E5) + "  DOWNLOAD APK";
+            case "remind_label": return "\u23F1  Remind me in:";
             case "chip_day": return "d";
             case "chip_1mo": return "1 month";
-            case "skip_btn": return "⏭  Skip this build";
-            case "obtainium_title": return "📦  Updating via Obtainium?";
-            case "obtainium_hide": return "⏸ Snooze for 1 mo";
-            case "obtainium_import": return "📲 Import profile";
+            case "skip_btn": return "\u23ED  Skip this build";
+            case "obtainium_title": return emoji(0x1F4E6) + "  Updating via Obtainium?";
+            case "obtainium_hide": return "\u23F8 Snooze for 1 mo";
+            case "obtainium_import": return emoji(0x1F4F2) + " Import profile";
             case "toast_snoozed": return "Reminder snoozed for %s";
             case "toast_skipped": return "Build %s skipped";
             case "toast_obtainium": return "Notifications muted for 1 month";
