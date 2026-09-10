@@ -174,7 +174,7 @@ public class JhcUpdateCheckPatch {
 
             // Blue circular badge (YouTube Morphe Accent)
             Paint bgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            bgPaint.setColor(Color.parseColor("#065FD4"));
+            bgPaint.setColor(Color.parseColor("#FF0000"));
             canvas.drawCircle(size / 2f, size / 2f, size / 2f - (2 * density), bgPaint);
 
             // White circular update arrow
@@ -628,17 +628,17 @@ public class JhcUpdateCheckPatch {
             scrollWrapper.setFocusableInTouchMode(true);
 
             boolean isInitLandscape = dm.widthPixels > dm.heightPixels;
-            int initMaxH = isInitLandscape ? Math.min(dm.heightPixels - dp(56, density), dp(310, density)) : (int) (dm.heightPixels * 0.9f);
+            int initMaxH = isInitLandscape ? Math.min(dm.heightPixels - dp(32, density), dp(290, density)) : (int) (dm.heightPixels * 0.9f);
             scrollWrapper.setMaxHeight(initMaxH);
 
             FrameLayout.LayoutParams initialWrapLp = new FrameLayout.LayoutParams(
-                isInitLandscape ? Math.min(dm.widthPixels - dp(48, density), dp(480, density)) : ViewGroup.LayoutParams.MATCH_PARENT,
+                isInitLandscape ? Math.min(dm.widthPixels - dp(32, density), dp(620, density)) : ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 isInitLandscape ? Gravity.CENTER : Gravity.BOTTOM
             );
             if (isInitLandscape) {
-                initialWrapLp.topMargin = dp(24, density);
-                initialWrapLp.bottomMargin = dp(24, density);
+                initialWrapLp.topMargin = dp(16, density);
+                initialWrapLp.bottomMargin = dp(16, density);
             }
             scrollWrapper.setLayoutParams(initialWrapLp);
             scrollWrapper.setVerticalScrollBarEnabled(false);
@@ -691,12 +691,11 @@ public class JhcUpdateCheckPatch {
                 }
             };
 
-            // Header Container (Drag area)
+            // Header Container (Drag handle only for portrait bottom sheet)
             LinearLayout headerLayout = new LinearLayout(activity);
             headerLayout.setOrientation(LinearLayout.VERTICAL);
             headerLayout.setOnTouchListener(dragListener);
 
-            // Drag handle
             View handle = new View(activity);
             LinearLayout.LayoutParams handleLp = new LinearLayout.LayoutParams(dp(36, density), dp(4, density));
             handleLp.gravity = Gravity.CENTER_HORIZONTAL;
@@ -706,8 +705,18 @@ public class JhcUpdateCheckPatch {
             handleBg.setCornerRadius(dp(2, density));
             handle.setBackground(handleBg);
             headerLayout.addView(handle);
+            sheet.addView(headerLayout);
 
-            // App Identity Row (Icon + Title + Subtitle)
+            // Columns Container (Vertical in portrait, 2-column Horizontal in landscape)
+            LinearLayout colsContainer = new LinearLayout(activity);
+            LinearLayout leftCol = new LinearLayout(activity);
+            leftCol.setOrientation(LinearLayout.VERTICAL);
+            LinearLayout rightCol = new LinearLayout(activity);
+            rightCol.setOrientation(LinearLayout.VERTICAL);
+
+            // ==================== LEFT COLUMN CONTENT ====================
+
+            // 1. App Identity Row (Icon + Title + Subtitle)
             LinearLayout identityRow = new LinearLayout(activity);
             identityRow.setOrientation(LinearLayout.HORIZONTAL);
             identityRow.setGravity(Gravity.CENTER_VERTICAL);
@@ -715,7 +724,6 @@ public class JhcUpdateCheckPatch {
             idRowLp.topMargin = dp(12, density);
             identityRow.setLayoutParams(idRowLp);
 
-            // Left Icon Squircle Box
             TextView iconBox = new TextView(activity);
             iconBox.setText(emoji(0x1F680));
             iconBox.setTextSize(20);
@@ -730,7 +738,6 @@ public class JhcUpdateCheckPatch {
             iconBox.setBackground(iconBg);
             identityRow.addView(iconBox);
 
-            // Right Title and Subtitle
             LinearLayout textBlock = new LinearLayout(activity);
             textBlock.setOrientation(LinearLayout.VERTICAL);
 
@@ -749,13 +756,12 @@ public class JhcUpdateCheckPatch {
             textBlock.addView(subView);
 
             identityRow.addView(textBlock);
-            headerLayout.addView(identityRow);
-            sheet.addView(headerLayout);
+            leftCol.addView(identityRow);
 
-            // --- INFO CONTAINER CARD (Patches Version + Build + Changelog Link) ---
+            // 2. Info Container Card (Patch version, Build number, Changelog link)
             LinearLayout infoCard = new LinearLayout(activity);
             infoCard.setOrientation(LinearLayout.VERTICAL);
-            infoCard.setPadding(dp(14, density), dp(12, density), dp(14, density), dp(12, density));
+            infoCard.setPadding(dp(14, density), dp(10, density), dp(14, density), dp(10, density));
 
             GradientDrawable infoCardBg = new GradientDrawable();
             infoCardBg.setColor(colSurface);
@@ -764,10 +770,9 @@ public class JhcUpdateCheckPatch {
             infoCard.setBackground(infoCardBg);
 
             LinearLayout.LayoutParams infoCardLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            infoCardLp.topMargin = dp(12, density);
+            infoCardLp.topMargin = dp(10, density);
             infoCard.setLayoutParams(infoCardLp);
 
-            // Info Row 1: Patch Version
             if (!patchVersion.isEmpty()) {
                 LinearLayout patchRow = new LinearLayout(activity);
                 patchRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -789,7 +794,6 @@ public class JhcUpdateCheckPatch {
                 infoCard.addView(patchRow);
             }
 
-            // Info Row 2: Build Tag
             LinearLayout buildRow = new LinearLayout(activity);
             buildRow.setOrientation(LinearLayout.HORIZONTAL);
             LinearLayout.LayoutParams buildRowLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -812,16 +816,14 @@ public class JhcUpdateCheckPatch {
 
             infoCard.addView(buildRow);
 
-            // Divider inside card
             View cardDivider = new View(activity);
             cardDivider.setBackgroundColor(colSurfaceBorder);
             LinearLayout.LayoutParams cDivLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1, density));
-            cDivLp.topMargin = dp(8, density);
-            cDivLp.bottomMargin = dp(8, density);
+            cDivLp.topMargin = dp(6, density);
+            cDivLp.bottomMargin = dp(6, density);
             cardDivider.setLayoutParams(cDivLp);
             infoCard.addView(cardDivider);
 
-            // Info Row 3: Clickable Changelog Link to GitHub
             TextView changelogBtn = new TextView(activity);
             changelogBtn.setText(getString("info_changelog_btn"));
             changelogBtn.setTextColor(colAccentText);
@@ -832,21 +834,22 @@ public class JhcUpdateCheckPatch {
                 openUrl(activity, changelogUrl);
             });
             infoCard.addView(changelogBtn);
+            leftCol.addView(infoCard);
 
-            sheet.addView(infoCard);
-
-            // --- PRIMARY DOWNLOAD BUTTON (44dp, filled pill) ---
+            // 3. Primary Download Button
             TextView downloadBtn = createButton(activity, getString("download_btn"), colPrimaryBtnBg, colPrimaryBtnText, density, 14);
-            LinearLayout.LayoutParams dlLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44, density));
-            dlLp.topMargin = dp(12, density);
+            LinearLayout.LayoutParams dlLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(42, density));
+            dlLp.topMargin = dp(10, density);
             downloadBtn.setLayoutParams(dlLp);
             downloadBtn.setOnClickListener(v -> {
                 dialog.dismiss();
                 openUrl(activity, downloadUrl);
             });
-            sheet.addView(downloadBtn);
+            leftCol.addView(downloadBtn);
 
-            // --- OBTAINIUM SECTION WITH RETURNED LABEL ---
+            // ==================== RIGHT COLUMN CONTENT ====================
+
+            // 4. Obtainium Section
             TextView obtainiumLabel = new TextView(activity);
             obtainiumLabel.setText(getString("obtainium_label"));
             obtainiumLabel.setTextColor(colSubtitle);
@@ -855,16 +858,14 @@ public class JhcUpdateCheckPatch {
             LinearLayout.LayoutParams obLblLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             obLblLp.topMargin = dp(12, density);
             obtainiumLabel.setLayoutParams(obLblLp);
-            sheet.addView(obtainiumLabel);
+            rightCol.addView(obtainiumLabel);
 
-            // Obtainium actions row: [ 📱 Открыть Obtainium ] [ ➕ Импорт профиля ]
             LinearLayout obtainiumRow = new LinearLayout(activity);
             obtainiumRow.setOrientation(LinearLayout.HORIZONTAL);
             LinearLayout.LayoutParams obRowLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             obRowLp.topMargin = dp(6, density);
             obtainiumRow.setLayoutParams(obRowLp);
 
-            // Left: Open Obtainium
             TextView openObtainiumBtn = createSubButton(activity, getString("obtainium_open"), colButtonSurface, colButtonBorder, colButtonText, density);
             LinearLayout.LayoutParams openLp = new LinearLayout.LayoutParams(0, dp(38, density), 1.0f);
             openLp.rightMargin = dp(6, density);
@@ -875,7 +876,6 @@ public class JhcUpdateCheckPatch {
             });
             obtainiumRow.addView(openObtainiumBtn);
 
-            // Right: Import profile
             TextView importBtn = createSubButton(activity, getString("obtainium_import"), colButtonSurface, colButtonBorder, colAccentText, density);
             LinearLayout.LayoutParams importLp = new LinearLayout.LayoutParams(0, dp(38, density), 1.0f);
             importBtn.setLayoutParams(importLp);
@@ -891,9 +891,9 @@ public class JhcUpdateCheckPatch {
                 }
             });
             obtainiumRow.addView(importBtn);
-            sheet.addView(obtainiumRow);
+            rightCol.addView(obtainiumRow);
 
-            // --- SNOOZE SECTION WITH RETURNED LABEL ---
+            // 5. Snooze Section
             TextView snoozeLabel = new TextView(activity);
             snoozeLabel.setText(getString("snooze_label"));
             snoozeLabel.setTextColor(colSubtitle);
@@ -902,9 +902,8 @@ public class JhcUpdateCheckPatch {
             LinearLayout.LayoutParams snoozeLblLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             snoozeLblLp.topMargin = dp(12, density);
             snoozeLabel.setLayoutParams(snoozeLblLp);
-            sheet.addView(snoozeLabel);
+            rightCol.addView(snoozeLabel);
 
-            // Snooze Chips: Clean values without repeating alarm clock icons
             HorizontalScrollView chipsScroll = new HorizontalScrollView(activity);
             chipsScroll.setHorizontalScrollBarEnabled(false);
             LinearLayout.LayoutParams scrollLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -933,9 +932,9 @@ public class JhcUpdateCheckPatch {
                 chipsRow.addView(chip);
             }
             chipsScroll.addView(chipsRow);
-            sheet.addView(chipsScroll);
+            rightCol.addView(chipsScroll);
 
-            // --- DISMISS / SKIP BUTTON ---
+            // 6. Dismiss / Skip Button
             TextView skipBtn = new TextView(activity);
             skipBtn.setText(getString("skip_btn"));
             skipBtn.setTextColor(colSubtitle);
@@ -951,13 +950,44 @@ public class JhcUpdateCheckPatch {
                 dialog.dismiss();
                 showToast(activity, String.format(getString("toast_skipped"), tag));
             });
-            sheet.addView(skipBtn);
+            rightCol.addView(skipBtn);
+
+            colsContainer.addView(leftCol);
+            colsContainer.addView(rightCol);
+            sheet.addView(colsContainer);
+
+            // Initial Layout Configuration (Portrait vs Landscape)
+            // isInitLandscape already defined above
+            if (isInitLandscape) {
+                handle.setVisibility(View.GONE);
+                sheetBg.setCornerRadius(dp(20, density));
+                sheet.setPadding(dp(20, density), dp(16, density), dp(20, density), dp(16, density));
+
+                colsContainer.setOrientation(LinearLayout.HORIZONTAL);
+                LinearLayout.LayoutParams leftLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.0f);
+                leftCol.setLayoutParams(leftLp);
+                LinearLayout.LayoutParams rightLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.0f);
+                rightLp.leftMargin = dp(16, density);
+                rightCol.setLayoutParams(rightLp);
+
+                idRowLp.topMargin = 0;
+                obLblLp.topMargin = 0;
+            } else {
+                handle.setVisibility(View.VISIBLE);
+                float r = dp(24, density);
+                sheetBg.setCornerRadii(new float[]{r, r, r, r, 0, 0, 0, 0});
+                sheet.setPadding(dp(20, density), dp(10, density), dp(20, density), dp(24, density));
+
+                colsContainer.setOrientation(LinearLayout.VERTICAL);
+                leftCol.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                rightCol.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            }
 
             scrollWrapper.addView(sheet);
             rootFrame.addView(scrollWrapper);
             dialog.setContentView(rootFrame);
 
-            // Dynamic Layout Updater for both Portrait and Landscape (on launch and rotation)
+            // Dynamic Layout Updater for Orientation Changes
             rootFrame.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
                 int totalWidth = right - left;
                 int totalHeight = bottom - top;
@@ -966,8 +996,8 @@ public class JhcUpdateCheckPatch {
                 boolean isLandscape = totalWidth > totalHeight;
 
                 if (isLandscape) {
-                    int cardWidth = Math.min(totalWidth - dp(48, density), dp(480, density));
-                    int maxCardHeight = Math.min(totalHeight - dp(56, density), dp(310, density));
+                    int cardWidth = Math.min(totalWidth - dp(32, density), dp(620, density));
+                    int maxCardHeight = Math.min(totalHeight - dp(32, density), dp(290, density));
                     scrollWrapper.setMaxHeight(maxCardHeight);
 
                     FrameLayout.LayoutParams wrapLp = new FrameLayout.LayoutParams(
@@ -975,22 +1005,30 @@ public class JhcUpdateCheckPatch {
                         ViewGroup.LayoutParams.WRAP_CONTENT,
                         Gravity.CENTER
                     );
-                    wrapLp.topMargin = dp(24, density);
-                    wrapLp.bottomMargin = dp(24, density);
+                    wrapLp.topMargin = dp(16, density);
+                    wrapLp.bottomMargin = dp(16, density);
                     scrollWrapper.setLayoutParams(wrapLp);
 
                     handle.setVisibility(View.GONE);
-                    sheetBg.setCornerRadius(dp(18, density));
-                    sheet.setPadding(dp(20, density), dp(16, density), dp(20, density), dp(14, density));
-                    handleLp.bottomMargin = 0;
+                    sheetBg.setCornerRadius(dp(20, density));
+                    sheet.setPadding(dp(20, density), dp(16, density), dp(20, density), dp(16, density));
+
+                    colsContainer.setOrientation(LinearLayout.HORIZONTAL);
+                    LinearLayout.LayoutParams leftLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.0f);
+                    leftCol.setLayoutParams(leftLp);
+                    LinearLayout.LayoutParams rightLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.0f);
+                    rightLp.leftMargin = dp(16, density);
+                    rightCol.setLayoutParams(rightLp);
+
                     idRowLp.topMargin = 0;
-                    infoCardLp.topMargin = dp(6, density);
-                    dlLp.topMargin = dp(6, density);
-                    obLblLp.topMargin = dp(6, density);
+                    infoCardLp.topMargin = dp(8, density);
+                    dlLp.topMargin = dp(8, density);
+                    obLblLp.topMargin = 0;
                     obRowLp.topMargin = dp(4, density);
-                    snoozeLblLp.topMargin = dp(6, density);
+                    snoozeLblLp.topMargin = dp(8, density);
                     scrollLp.topMargin = dp(4, density);
-                    skipLp.topMargin = dp(6, density);
+                    skipLp.topMargin = dp(8, density);
+
                     scrollWrapper.post(() -> scrollWrapper.scrollTo(0, 0));
                 } else {
                     int maxCardHeight = (int) (totalHeight * 0.9f);
@@ -1008,6 +1046,14 @@ public class JhcUpdateCheckPatch {
                     sheetBg.setCornerRadii(new float[]{r, r, r, r, 0, 0, 0, 0});
                     sheet.setPadding(dp(20, density), dp(10, density), dp(20, density), dp(24, density));
                     handleLp.bottomMargin = dp(10, density);
+
+                    colsContainer.setOrientation(LinearLayout.VERTICAL);
+                    LinearLayout.LayoutParams leftLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                    leftCol.setLayoutParams(leftLp);
+                    LinearLayout.LayoutParams rightLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                    rightLp.leftMargin = 0;
+                    rightCol.setLayoutParams(rightLp);
+
                     idRowLp.topMargin = dp(12, density);
                     infoCardLp.topMargin = dp(12, density);
                     dlLp.topMargin = dp(12, density);
@@ -1024,7 +1070,6 @@ public class JhcUpdateCheckPatch {
                 window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
                 window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
             }
-
             dialog.show();
         } catch (Throwable t) {
             Log.e(TAG, "Error displaying update dialog", t);
@@ -1179,10 +1224,10 @@ public class JhcUpdateCheckPatch {
                 case "toast_snoozed": return "Нагадування відкладено на %s";
                 case "toast_skipped": return "Збірку %s пропущено";
                 case "toast_install_obtainium": return "Встановіть Obtainium для автооновлень";
-                case "shortcut_label": return "Оновлення";
-                case "shortcut_long_label": return "🚀  Перевірити оновлення";
-                case "toast_checking_updates": return "Перевірка оновлень...";
-                case "toast_already_latest": return "У вас встановлена остання версія";
+                case "shortcut_label": return "Оновити патчі";
+                case "shortcut_long_label": return "🔄  Оновити патчі";
+                case "toast_checking_updates": return "Перевірка оновлень патчів...";
+                case "toast_already_latest": return "У вас встановлені найновіші патчі";
             }
         }
         // Russian, Belarusian, Kazakh
@@ -1205,10 +1250,10 @@ public class JhcUpdateCheckPatch {
                 case "toast_snoozed": return "Напоминание отложено на %s";
                 case "toast_skipped": return "Билд %s пропущен";
                 case "toast_install_obtainium": return "Установите Obtainium для автообновлений";
-                case "shortcut_label": return "Обновления";
-                case "shortcut_long_label": return "🚀  Проверить обновления";
-                case "toast_checking_updates": return "Проверка обновлений...";
-                case "toast_already_latest": return "У вас установлена последняя версия";
+                case "shortcut_label": return "Обновить патчи";
+                case "shortcut_long_label": return "🔄  Обновить патчи";
+                case "toast_checking_updates": return "Проверка обновлений патчей...";
+                case "toast_already_latest": return "У вас установлены актуальные патчи";
             }
         } 
         // Spanish
@@ -1231,10 +1276,10 @@ public class JhcUpdateCheckPatch {
                 case "toast_snoozed": return "Recordatorio pospuesto por %s";
                 case "toast_skipped": return "Versión %s omitida";
                 case "toast_install_obtainium": return "Instala Obtainium para actualizaciones";
-                case "shortcut_label": return "Actualizaciones";
-                case "shortcut_long_label": return "🚀  Buscar actualizaciones";
-                case "toast_checking_updates": return "Buscando actualizaciones...";
-                case "toast_already_latest": return "Ya tienes la última versión instalada";
+                case "shortcut_label": return "Actualizar parches";
+                case "shortcut_long_label": return "🔄  Actualizar parches";
+                case "toast_checking_updates": return "Buscando actualizaciones de parches...";
+                case "toast_already_latest": return "Tienes instalados los parches más recientes";
             }
         } 
         // German
@@ -1257,10 +1302,10 @@ public class JhcUpdateCheckPatch {
                 case "toast_snoozed": return "Erinnerung verschoben um %s";
                 case "toast_skipped": return "Build %s übersprungen";
                 case "toast_install_obtainium": return "Installiere Obtainium für Updates";
-                case "shortcut_label": return "Updates";
-                case "shortcut_long_label": return "🚀  Nach Updates suchen";
-                case "toast_checking_updates": return "Suche nach Updates...";
-                case "toast_already_latest": return "Sie haben die neueste Version installiert";
+                case "shortcut_label": return "Patches aktualisieren";
+                case "shortcut_long_label": return "🔄  Patches aktualisieren";
+                case "toast_checking_updates": return "Suche nach Patch-Updates...";
+                case "toast_already_latest": return "Sie haben die neuesten Patches installiert";
             }
         }
 
