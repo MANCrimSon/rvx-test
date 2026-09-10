@@ -902,25 +902,49 @@ public class JhcUpdateCheckPatch {
             snoozeHeaderLp.topMargin = dp(12, density);
             snoozeHeader.setLayoutParams(snoozeHeaderLp);
 
-            TextView snoozeLabel = new TextView(activity);
-            snoozeLabel.setText(getString("snooze_label"));
-            snoozeLabel.setTextColor(colSubtitle);
-            snoozeLabel.setTextSize(11);
-            snoozeLabel.setTypeface(Typeface.DEFAULT_BOLD);
-            snoozeLabel.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.0f));
-            snoozeHeader.addView(snoozeLabel);
-
             SharedPreferences prefs = activity.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
             long curSnooze = prefs.getLong(KEY_SNOOZE_UNTIL, 0L);
             String curSkip = prefs.getString(KEY_SKIPPED_TAG, "");
-            boolean hasActivePause = (System.currentTimeMillis() < curSnooze) || !curSkip.isEmpty();
+            long now = System.currentTimeMillis();
+            boolean isSnoozed = (now < curSnooze);
+            boolean isSkipped = !curSkip.isEmpty();
+            boolean hasActivePause = isSnoozed || isSkipped;
+
+            String headerText;
+            if (curSnooze == Long.MAX_VALUE) {
+                headerText = getString("status_snoozed_forever");
+            } else if (isSnoozed) {
+                long diff = curSnooze - now;
+                int leftDays = (int) (diff / (24 * 60 * 60 * 1000L));
+                int leftHours = (int) ((diff % (24 * 60 * 60 * 1000L)) / (60 * 60 * 1000L));
+                if (leftDays > 0) {
+                    headerText = String.format(getString("status_snoozed_days_fmt"), leftDays);
+                } else {
+                    headerText = String.format(getString("status_snoozed_hours_fmt"), Math.max(1, leftHours));
+                }
+            } else if (isSkipped) {
+                headerText = String.format(getString("status_skipped_fmt"), curSkip);
+            } else {
+                headerText = getString("snooze_label");
+            }
+
+            TextView snoozeLabel = new TextView(activity);
+            snoozeLabel.setText(headerText);
+            snoozeLabel.setTextColor(hasActivePause ? colAccentText : colSubtitle);
+            snoozeLabel.setTextSize(11);
+            snoozeLabel.setTypeface(Typeface.DEFAULT_BOLD);
+            snoozeLabel.setSingleLine(true);
+            LinearLayout.LayoutParams sLblLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.0f);
+            snoozeLabel.setLayoutParams(sLblLp);
+            snoozeHeader.addView(snoozeLabel);
 
             TextView resetBtn = new TextView(activity);
             resetBtn.setText(getString("btn_reset_snooze"));
-            resetBtn.setTextColor(hasActivePause ? colAccentText : colSubtitle);
+            resetBtn.setTextColor(colAccentText);
             resetBtn.setTextSize(11);
             resetBtn.setTypeface(Typeface.DEFAULT_BOLD);
             resetBtn.setPadding(dp(4, density), 0, dp(4, density), 0);
+            resetBtn.setVisibility(hasActivePause ? View.VISIBLE : View.GONE);
             resetBtn.setOnClickListener(v -> {
                 prefs.edit()
                     .remove(KEY_SNOOZE_UNTIL)
@@ -1283,6 +1307,10 @@ public class JhcUpdateCheckPatch {
                 case "chip_1mo": return "1 міс";
                 case "chip_forever": return "Назавжди";
                 case "btn_reset_snooze": return "↺  Скинути";
+                case "status_snoozed_forever": return "🔕  Вимкнено назавжди";
+                case "status_snoozed_days_fmt": return "🔕  Пауза: ще %d дн.";
+                case "status_snoozed_hours_fmt": return "🔕  Пауза: ще %d год.";
+                case "status_skipped_fmt": return "⚠️  Збірку %s пропущено";
                 case "skip_btn": return "Пропустити цю версію";
                 case "toast_snoozed": return "Сповіщення вимкнено на %s";
                 case "toast_snoozed_forever": return "Сповіщення вимкнено назавжди";
@@ -1313,6 +1341,10 @@ public class JhcUpdateCheckPatch {
                 case "chip_1mo": return "1 мес";
                 case "chip_forever": return "Навсегда";
                 case "btn_reset_snooze": return "↺  Сбросить";
+                case "status_snoozed_forever": return "🔕  Отключено навсегда";
+                case "status_snoozed_days_fmt": return "🔕  Пауза: ещё %d дн.";
+                case "status_snoozed_hours_fmt": return "🔕  Пауза: ещё %d ч.";
+                case "status_skipped_fmt": return "⚠️  Сборка %s пропущена";
                 case "skip_btn": return "Пропустить эту версию";
                 case "toast_snoozed": return "Уведомления отключены на %s";
                 case "toast_snoozed_forever": return "Уведомления отключены навсегда";
@@ -1343,6 +1375,10 @@ public class JhcUpdateCheckPatch {
                 case "chip_1mo": return "1 mes";
                 case "chip_forever": return "Siempre";
                 case "btn_reset_snooze": return "↺  Restablecer";
+                case "status_snoozed_forever": return "🔕  Desactivado permanentemente";
+                case "status_snoozed_days_fmt": return "🔕  Pausa: quedan %d d";
+                case "status_snoozed_hours_fmt": return "🔕  Pausa: quedan %d h";
+                case "status_skipped_fmt": return "⚠️  Versión %s omitida";
                 case "skip_btn": return "Omitir esta versión";
                 case "toast_snoozed": return "Notificaciones pausadas por %s";
                 case "toast_snoozed_forever": return "Notificaciones desactivadas permanentemente";
@@ -1373,6 +1409,10 @@ public class JhcUpdateCheckPatch {
                 case "chip_1mo": return "1 Monat";
                 case "chip_forever": return "Immer";
                 case "btn_reset_snooze": return "↺  Zurücksetzen";
+                case "status_snoozed_forever": return "🔕  Dauerhaft deaktiviert";
+                case "status_snoozed_days_fmt": return "🔕  Pausiert: noch %d T";
+                case "status_snoozed_hours_fmt": return "🔕  Pausiert: noch %d Std";
+                case "status_skipped_fmt": return "⚠️  Build %s übersprungen";
                 case "skip_btn": return "Diese Version überspringen";
                 case "toast_snoozed": return "Benachrichtigungen pausiert für %s";
                 case "toast_snoozed_forever": return "Benachrichtigungen dauerhaft deaktiviert";
@@ -1403,6 +1443,10 @@ public class JhcUpdateCheckPatch {
             case "chip_1mo": return "1 mo";
             case "chip_forever": return "Forever";
             case "btn_reset_snooze": return "↺  Reset";
+            case "status_snoozed_forever": return "🔕  Disabled permanently";
+            case "status_snoozed_days_fmt": return "🔕  Paused: %d d left";
+            case "status_snoozed_hours_fmt": return "🔕  Paused: %d h left";
+            case "status_skipped_fmt": return "⚠️  Build %s skipped";
             case "skip_btn": return "Skip this version";
             case "toast_snoozed": return "Notifications paused for %s";
             case "toast_snoozed_forever": return "Notifications disabled permanently";
