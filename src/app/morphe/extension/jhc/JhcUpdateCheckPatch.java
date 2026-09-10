@@ -114,6 +114,11 @@ public class JhcUpdateCheckPatch {
 
                 long now = System.currentTimeMillis();
                 long lastCheck = prefs.getLong(KEY_LAST_CHECK_TIME, 0L);
+                long snoozeUntil = prefs.getLong(KEY_SNOOZE_UNTIL, 0L);
+                if (!manualCheck && !FORCE_TEST_ALWAYS_SHOW && (now < snoozeUntil)) {
+                    Log.d(TAG, "Update notifications paused until " + snoozeUntil);
+                    return;
+                }
                 if (!manualCheck && !FORCE_TEST_ALWAYS_SHOW && API_COOLDOWN_MS > 0 && (now - lastCheck < API_COOLDOWN_MS)) {
                     Log.d(TAG, "Cooldown active, skipping check");
                     return;
@@ -327,6 +332,13 @@ public class JhcUpdateCheckPatch {
 
             // If not in forced test mode and not a manual check, check snooze and skip
             if (!FORCE_TEST_ALWAYS_SHOW && !manualCheck) {
+                long snoozeUntil = prefs.getLong(KEY_SNOOZE_UNTIL, 0L);
+                long now = System.currentTimeMillis();
+                if (now < snoozeUntil) {
+                    Log.d(TAG, "Update notifications are paused until " + snoozeUntil);
+                    return;
+                }
+
                 String skippedTag = prefs.getString(KEY_SKIPPED_TAG, "");
                 if (targetTag.equals(skippedTag)) {
                     Log.d(TAG, "Build " + targetTag + " was skipped by user");
@@ -334,14 +346,6 @@ public class JhcUpdateCheckPatch {
                 }
 
                 if (EMBEDDED_BUILD_CODE > 0) {
-                    String snoozedTag = prefs.getString(KEY_SNOOZED_TAG, "");
-                    long snoozeUntil = prefs.getLong(KEY_SNOOZE_UNTIL, 0L);
-                    long now = System.currentTimeMillis();
-                    if (targetTag.equals(snoozedTag) && now < snoozeUntil) {
-                        Log.d(TAG, "Build " + targetTag + " is snoozed until " + snoozeUntil);
-                        return;
-                    }
-
                     int remoteBuildCode = parseNumericTag(targetTag);
                     if (remoteBuildCode > 0 && remoteBuildCode <= EMBEDDED_BUILD_CODE) {
                         Log.d(TAG, "App is up to date (remote: " + remoteBuildCode + ", installed: " + EMBEDDED_BUILD_CODE + ")");
@@ -956,6 +960,17 @@ public class JhcUpdateCheckPatch {
             });
             rightCol.addView(skipBtn);
 
+            // 7. Shortcut Hint
+            TextView hintView = new TextView(activity);
+            hintView.setText(getString("hint_shortcut"));
+            hintView.setTextColor(colSubtitle);
+            hintView.setTextSize(10.5f);
+            hintView.setGravity(Gravity.CENTER);
+            LinearLayout.LayoutParams hintLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            hintLp.topMargin = dp(6, density);
+            hintView.setLayoutParams(hintLp);
+            rightCol.addView(hintView);
+
             colsContainer.addView(leftCol);
             colsContainer.addView(rightCol);
             sheet.addView(colsContainer);
@@ -1032,6 +1047,7 @@ public class JhcUpdateCheckPatch {
                     snoozeLblLp.topMargin = dp(8, density);
                     scrollLp.topMargin = dp(4, density);
                     skipLp.topMargin = dp(8, density);
+                    hintLp.topMargin = dp(4, density);
 
                     scrollWrapper.post(() -> scrollWrapper.scrollTo(0, 0));
                 } else {
@@ -1066,6 +1082,7 @@ public class JhcUpdateCheckPatch {
                     snoozeLblLp.topMargin = dp(12, density);
                     scrollLp.topMargin = dp(6, density);
                     skipLp.topMargin = dp(10, density);
+                    hintLp.topMargin = dp(6, density);
                 }
             });
 
@@ -1221,12 +1238,13 @@ public class JhcUpdateCheckPatch {
                 case "obtainium_label": return "ОНОВЛЕННЯ ЧЕРЕЗ OBTAINIUM:";
                 case "obtainium_open": return emoji(0x1F4F1) + "  Відкрити Obtainium";
                 case "obtainium_import": return "➕  Імпорт профілю";
-                case "snooze_label": return "⏰  НАГАДАТИ ПІЗНІШЕ:";
+                case "snooze_label": return "🔕  ВИМКНУТИ СПОВІЩЕННЯ НА:";
                 case "chip_day": return "дн";
                 case "chip_1mo": return "1 міс";
                 case "chip_3mo": return "3 міс";
                 case "skip_btn": return "Пропустити цю версію";
-                case "toast_snoozed": return "Нагадування відкладено на %s";
+                case "toast_snoozed": return "Сповіщення вимкнено на %s";
+                case "hint_shortcut": return "💡 Затисніть іконку на робочому столі для ручної перевірки";
                 case "toast_skipped": return "Збірку %s пропущено";
                 case "toast_install_obtainium": return "Встановіть Obtainium для автооновлень";
                 case "shortcut_label": return "Оновити патчі";
@@ -1247,12 +1265,13 @@ public class JhcUpdateCheckPatch {
                 case "obtainium_label": return "ОБНОВЛЕНИЕ ЧЕРЕЗ OBTAINIUM:";
                 case "obtainium_open": return emoji(0x1F4F1) + "  Открыть Obtainium";
                 case "obtainium_import": return "➕  Импорт профиля";
-                case "snooze_label": return "⏰  НАПОМНИТЬ ПОЗЖЕ:";
+                case "snooze_label": return "🔕  ОТКЛЮЧИТЬ УВЕДОМЛЕНИЯ НА:";
                 case "chip_day": return "дн";
                 case "chip_1mo": return "1 мес";
                 case "chip_3mo": return "3 мес";
                 case "skip_btn": return "Пропустить эту версию";
-                case "toast_snoozed": return "Напоминание отложено на %s";
+                case "toast_snoozed": return "Уведомления отключены на %s";
+                case "hint_shortcut": return "💡 Зажмите иконку на рабочем столе для ручной проверки";
                 case "toast_skipped": return "Билд %s пропущен";
                 case "toast_install_obtainium": return "Установите Obtainium для автообновлений";
                 case "shortcut_label": return "Обновить патчи";
@@ -1273,12 +1292,13 @@ public class JhcUpdateCheckPatch {
                 case "obtainium_label": return "ACTUALIZACIÓN VÍA OBTAINIUM:";
                 case "obtainium_open": return emoji(0x1F4F1) + "  Abrir Obtainium";
                 case "obtainium_import": return "➕  Importar perfil";
-                case "snooze_label": return "⏰  RECORDAR MÁS TARDE:";
+                case "snooze_label": return "🔕  PAUSAR NOTIFICACIONES:";
                 case "chip_day": return "d";
                 case "chip_1mo": return "1 mes";
                 case "chip_3mo": return "3 meses";
                 case "skip_btn": return "Omitir esta versión";
-                case "toast_snoozed": return "Recordatorio pospuesto por %s";
+                case "toast_snoozed": return "Notificaciones pausadas por %s";
+                case "hint_shortcut": return "💡 Mantén pulsado el icono para buscar actualizaciones";
                 case "toast_skipped": return "Versión %s omitida";
                 case "toast_install_obtainium": return "Instala Obtainium para actualizaciones";
                 case "shortcut_label": return "Actualizar parches";
@@ -1299,12 +1319,13 @@ public class JhcUpdateCheckPatch {
                 case "obtainium_label": return "AKTUALISIERUNG ÜBER OBTAINIUM:";
                 case "obtainium_open": return emoji(0x1F4F1) + "  Obtainium öffnen";
                 case "obtainium_import": return "➕  Profil importieren";
-                case "snooze_label": return "⏰  SPÄTER ERINNERN:";
+                case "snooze_label": return "🔕  BENACHRICHTIGUNGEN PAUSIEREN:";
                 case "chip_day": return "T";
                 case "chip_1mo": return "1 Monat";
                 case "chip_3mo": return "3 Monate";
                 case "skip_btn": return "Diese Version überspringen";
-                case "toast_snoozed": return "Erinnerung verschoben um %s";
+                case "toast_snoozed": return "Benachrichtigungen pausiert für %s";
+                case "hint_shortcut": return "💡 Halte das App-Symbol gedrückt für manuelle Suche";
                 case "toast_skipped": return "Build %s übersprungen";
                 case "toast_install_obtainium": return "Installiere Obtainium für Updates";
                 case "shortcut_label": return "Patches aktualisieren";
@@ -1325,14 +1346,19 @@ public class JhcUpdateCheckPatch {
             case "obtainium_label": return "UPDATE VIA OBTAINIUM:";
             case "obtainium_open": return emoji(0x1F4F1) + "  Open Obtainium";
             case "obtainium_import": return "➕  Import Profile";
-            case "snooze_label": return "⏰  REMIND ME LATER:";
+            case "snooze_label": return "🔕  PAUSE NOTIFICATIONS FOR:";
             case "chip_day": return "d";
             case "chip_1mo": return "1 mo";
             case "chip_3mo": return "3 mo";
             case "skip_btn": return "Skip this version";
-            case "toast_snoozed": return "Reminder snoozed for %s";
+            case "toast_snoozed": return "Notifications paused for %s";
             case "toast_skipped": return "Build %s skipped";
             case "toast_install_obtainium": return "Install Obtainium for auto-updates";
+            case "shortcut_label": return "Update Patches";
+            case "shortcut_long_label": return "🔄  Update Patches";
+            case "toast_checking_updates": return "Checking for patch updates...";
+            case "toast_already_latest": return "You have the latest patches installed";
+            case "hint_shortcut": return "💡 Long press the home screen icon to check manually";
             default: return key;
         }
      }
