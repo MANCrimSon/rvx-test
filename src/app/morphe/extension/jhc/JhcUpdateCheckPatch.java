@@ -172,28 +172,28 @@ public class JhcUpdateCheckPatch {
             Bitmap bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
             Canvas canvas = new Canvas(bitmap);
 
-            // Blue circular badge (YouTube Morphe Accent)
+            // White circular badge
             Paint bgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            bgPaint.setColor(Color.parseColor("#FF0000"));
+            bgPaint.setColor(Color.WHITE);
             canvas.drawCircle(size / 2f, size / 2f, size / 2f - (2 * density), bgPaint);
 
-            // White circular update arrow
+            // Red circular update arrow (YouTube Brand Red)
             Paint arrowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            arrowPaint.setColor(Color.WHITE);
+            arrowPaint.setColor(Color.parseColor("#FF0000"));
             arrowPaint.setStyle(Paint.Style.STROKE);
-            arrowPaint.setStrokeWidth(5f * density);
+            arrowPaint.setStrokeWidth(5.5f * density);
             arrowPaint.setStrokeCap(Paint.Cap.ROUND);
 
             float pad = size * 0.28f;
             RectF arcBounds = new RectF(pad, pad, size - pad, size - pad);
             canvas.drawArc(arcBounds, 40, 275, false, arrowPaint);
 
-            // Arrow head
+            // Arrow head in YouTube Red
             Paint fillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            fillPaint.setColor(Color.WHITE);
+            fillPaint.setColor(Color.parseColor("#FF0000"));
             fillPaint.setStyle(Paint.Style.FILL);
 
-            float arrowSize = 6f * density;
+            float arrowSize = 6.5f * density;
             Path head = new Path();
             float tipX = size - pad;
             float tipY = size / 2f;
@@ -632,7 +632,7 @@ public class JhcUpdateCheckPatch {
             scrollWrapper.setMaxHeight(initMaxH);
 
             FrameLayout.LayoutParams initialWrapLp = new FrameLayout.LayoutParams(
-                isInitLandscape ? Math.min(dm.widthPixels - dp(32, density), dp(620, density)) : ViewGroup.LayoutParams.MATCH_PARENT,
+                isInitLandscape ? Math.min(dm.widthPixels - dp(32, density), dp(660, density)) : ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 isInitLandscape ? Gravity.CENTER : Gravity.BOTTOM
             );
@@ -904,17 +904,15 @@ public class JhcUpdateCheckPatch {
             snoozeLabel.setLayoutParams(snoozeLblLp);
             rightCol.addView(snoozeLabel);
 
-            HorizontalScrollView chipsScroll = new HorizontalScrollView(activity);
-            chipsScroll.setHorizontalScrollBarEnabled(false);
-            LinearLayout.LayoutParams scrollLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            scrollLp.topMargin = dp(6, density);
-            chipsScroll.setLayoutParams(scrollLp);
-
             LinearLayout chipsRow = new LinearLayout(activity);
             chipsRow.setOrientation(LinearLayout.HORIZONTAL);
+            LinearLayout.LayoutParams scrollLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(34, density));
+            scrollLp.topMargin = dp(6, density);
+            chipsRow.setLayoutParams(scrollLp);
 
             int[] days = {1, 3, 7, 14, 30, 90};
-            for (int d : days) {
+            for (int i = 0; i < days.length; i++) {
+                int d = days[i];
                 String label;
                 if (d == 30) {
                     label = getString("chip_1mo");
@@ -924,6 +922,16 @@ public class JhcUpdateCheckPatch {
                     label = d + " " + getString("chip_day");
                 }
                 TextView chip = createChip(activity, label, colSurface, colSurfaceBorder, colSubtitle, density);
+                chip.setGravity(Gravity.CENTER);
+                chip.setPadding(0, 0, 0, 0);
+                chip.setTextSize(11);
+
+                LinearLayout.LayoutParams chipLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1.0f);
+                if (i > 0) {
+                    chipLp.leftMargin = dp(4, density);
+                }
+                chip.setLayoutParams(chipLp);
+
                 chip.setOnClickListener(v -> {
                     snooze(activity, tag, d);
                     dialog.dismiss();
@@ -931,8 +939,7 @@ public class JhcUpdateCheckPatch {
                 });
                 chipsRow.addView(chip);
             }
-            chipsScroll.addView(chipsRow);
-            rightCol.addView(chipsScroll);
+            rightCol.addView(chipsRow);
 
             // 6. Dismiss / Skip Button
             TextView skipBtn = new TextView(activity);
@@ -996,7 +1003,7 @@ public class JhcUpdateCheckPatch {
                 boolean isLandscape = totalWidth > totalHeight;
 
                 if (isLandscape) {
-                    int cardWidth = Math.min(totalWidth - dp(32, density), dp(620, density));
+                    int cardWidth = Math.min(totalWidth - dp(32, density), dp(660, density));
                     int maxCardHeight = Math.min(totalHeight - dp(32, density), dp(290, density));
                     scrollWrapper.setMaxHeight(maxCardHeight);
 
@@ -1183,10 +1190,11 @@ public class JhcUpdateCheckPatch {
         TextView tv = new TextView(context);
         tv.setText(text);
         tv.setTextColor(textColor);
-        tv.setTextSize(12);
+        tv.setTextSize(11);
         tv.setTypeface(Typeface.DEFAULT_BOLD);
         tv.setGravity(Gravity.CENTER);
-        tv.setPadding(dp(8, density), dp(8, density), dp(8, density), dp(8, density));
+        tv.setSingleLine(true);
+        tv.setPadding(dp(4, density), dp(6, density), dp(4, density), dp(6, density));
 
         GradientDrawable gd = new GradientDrawable();
         gd.setColor(bgColor);
