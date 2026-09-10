@@ -35,6 +35,13 @@ import android.widget.Toast;
 import android.content.pm.ShortcutInfo;
 import android.content.pm.ShortcutManager;
 import android.graphics.drawable.Icon;
+import android.app.Application;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.RectF;
+import android.os.Bundle;
 import java.util.Collections;
 
 import org.json.JSONArray;
@@ -81,6 +88,7 @@ public class JhcUpdateCheckPatch {
     public static void checkUpdate(Context context) {
         if (context == null) return;
 
+        registerLifecycleIfNeeded(context);
         registerShortcut(context);
 
         boolean isManual = false;
@@ -118,6 +126,94 @@ public class JhcUpdateCheckPatch {
         }, delay);
     }
 
+    private static boolean lifecycleRegistered = false;
+
+    private static void registerLifecycleIfNeeded(Context context) {
+        if (lifecycleRegistered || context == null) return;
+        try {
+            Application app = null;
+            if (context instanceof Activity) {
+                app = ((Activity) context).getApplication();
+            } else if (context instanceof Application) {
+                app = (Application) context;
+            } else if (context.getApplicationContext() instanceof Application) {
+                app = (Application) context.getApplicationContext();
+            }
+            if (app != null) {
+                lifecycleRegistered = true;
+                app.registerActivityLifecycleCallbacks(new Application.ActivityLifecycleCallbacks() {
+                    @Override
+                    public void onActivityResumed(Activity activity) {
+                        Intent intent = activity.getIntent();
+                        if (intent != null && ACTION_MANUAL_CHECK.equals(intent.getAction())) {
+                            intent.setAction(Intent.ACTION_MAIN);
+                            showToast(activity, getString("toast_checking_updates"));
+                            new Thread(() -> performCheck(activity, true)).start();
+                        }
+                    }
+
+                    @Override public void onActivityCreated(Activity a, Bundle b) {}
+                    @Override public void onActivityStarted(Activity a) {}
+                    @Override public void onActivityPaused(Activity a) {}
+                    @Override public void onActivityStopped(Activity a) {}
+                    @Override public void onActivitySaveInstanceState(Activity a, Bundle b) {}
+                    @Override public void onActivityDestroyed(Activity a) {}
+                });
+            }
+        } catch (Throwable t) {
+            Log.e(TAG, "Failed to register lifecycle callbacks", t);
+        }
+    }
+
+    private static Icon createShortcutIcon(Context context) {
+        try {
+            float density = context.getResources().getDisplayMetrics().density;
+            int size = (int) (96 * density);
+            Bitmap bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+            Canvas canvas = new Canvas(bitmap);
+
+            // Blue circular badge (YouTube Morphe Accent)
+            Paint bgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            bgPaint.setColor(Color.parseColor("#065FD4"));
+            canvas.drawCircle(size / 2f, size / 2f, size / 2f - (2 * density), bgPaint);
+
+            // White circular update arrow
+            Paint arrowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            arrowPaint.setColor(Color.WHITE);
+            arrowPaint.setStyle(Paint.Style.STROKE);
+            arrowPaint.setStrokeWidth(5f * density);
+            arrowPaint.setStrokeCap(Paint.Cap.ROUND);
+
+            float pad = size * 0.28f;
+            RectF arcBounds = new RectF(pad, pad, size - pad, size - pad);
+            canvas.drawArc(arcBounds, 40, 275, false, arrowPaint);
+
+            // Arrow head
+            Paint fillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            fillPaint.setColor(Color.WHITE);
+            fillPaint.setStyle(Paint.Style.FILL);
+
+            float arrowSize = 6f * density;
+            Path head = new Path();
+            float tipX = size - pad;
+            float tipY = size / 2f;
+            head.moveTo(tipX, tipY - arrowSize * 1.5f);
+            head.lineTo(tipX + arrowSize * 1.6f, tipY + arrowSize * 0.4f);
+            head.lineTo(tipX - arrowSize * 1.3f, tipY + arrowSize * 0.4f);
+            head.close();
+            canvas.drawPath(head, fillPaint);
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                return Icon.createWithAdaptiveBitmap(bitmap);
+            } else {
+                return Icon.createWithBitmap(bitmap);
+            }
+        } catch (Throwable t) {
+            Log.e(TAG, "Failed to create custom shortcut icon", t);
+            return null;
+        }
+    }
+
     private static void registerShortcut(Context context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N_MR1) {
             try {
@@ -125,19 +221,24 @@ public class JhcUpdateCheckPatch {
                 if (sm != null) {
                     Intent shortcutIntent = new Intent(context, context.getClass());
                     shortcutIntent.setAction(ACTION_MANUAL_CHECK);
-                    shortcutIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                    shortcutIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
 
                     ShortcutInfo.Builder builder = new ShortcutInfo.Builder(context, "morphe_check_updates")
                         .setShortLabel(getString("shortcut_label"))
                         .setLongLabel(getString("shortcut_long_label"))
                         .setIntent(shortcutIntent);
 
-                    try {
-                        int iconRes = context.getApplicationInfo().icon;
-                        if (iconRes != 0) {
-                            builder.setIcon(Icon.createWithResource(context, iconRes));
-                        }
-                    } catch (Throwable ignored) {}
+                    Icon customIcon = createShortcutIcon(context);
+                    if (customIcon != null) {
+                        builder.setIcon(customIcon);
+                    } else {
+                        try {
+                            int iconRes = context.getApplicationInfo().icon;
+                            if (iconRes != 0) {
+                                builder.setIcon(Icon.createWithResource(context, iconRes));
+                            }
+                        } catch (Throwable ignored) {}
+                    }
 
                     sm.setDynamicShortcuts(Collections.singletonList(builder.build()));
                 }
@@ -508,6 +609,7 @@ public class JhcUpdateCheckPatch {
             FrameLayout rootFrame = new FrameLayout(activity);
             rootFrame.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
             rootFrame.setBackgroundColor(colBackdrop);
+            rootFrame.setFitsSystemWindows(true);
             rootFrame.setOnClickListener(v -> dialog.dismiss());
 
             // Bottom sheet card layout
@@ -519,11 +621,26 @@ public class JhcUpdateCheckPatch {
             sheetBg.setColor(colCardBg);
             sheet.setBackground(sheetBg);
 
-            // ScrollWrapper
+            // ScrollWrapper with prevention of auto-scrolling
             MaxHeightScrollView scrollWrapper = new MaxHeightScrollView(activity);
+            scrollWrapper.setDescendantFocusability(ViewGroup.FOCUS_BEFORE_DESCENDANTS);
+            scrollWrapper.setFocusable(true);
+            scrollWrapper.setFocusableInTouchMode(true);
+
             boolean isInitLandscape = dm.widthPixels > dm.heightPixels;
-            int initMaxH = isInitLandscape ? (dm.heightPixels - dp(24, density)) : (int) (dm.heightPixels * 0.9f);
+            int initMaxH = isInitLandscape ? Math.min(dm.heightPixels - dp(56, density), dp(310, density)) : (int) (dm.heightPixels * 0.9f);
             scrollWrapper.setMaxHeight(initMaxH);
+
+            FrameLayout.LayoutParams initialWrapLp = new FrameLayout.LayoutParams(
+                isInitLandscape ? Math.min(dm.widthPixels - dp(48, density), dp(480, density)) : ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                isInitLandscape ? Gravity.CENTER : Gravity.BOTTOM
+            );
+            if (isInitLandscape) {
+                initialWrapLp.topMargin = dp(24, density);
+                initialWrapLp.bottomMargin = dp(24, density);
+            }
+            scrollWrapper.setLayoutParams(initialWrapLp);
             scrollWrapper.setVerticalScrollBarEnabled(false);
 
             // Drag to dismiss touch listener
@@ -849,8 +966,8 @@ public class JhcUpdateCheckPatch {
                 boolean isLandscape = totalWidth > totalHeight;
 
                 if (isLandscape) {
-                    int cardWidth = Math.min(totalWidth - dp(32, density), dp(480, density));
-                    int maxCardHeight = totalHeight - dp(24, density);
+                    int cardWidth = Math.min(totalWidth - dp(48, density), dp(480, density));
+                    int maxCardHeight = Math.min(totalHeight - dp(56, density), dp(310, density));
                     scrollWrapper.setMaxHeight(maxCardHeight);
 
                     FrameLayout.LayoutParams wrapLp = new FrameLayout.LayoutParams(
@@ -858,22 +975,23 @@ public class JhcUpdateCheckPatch {
                         ViewGroup.LayoutParams.WRAP_CONTENT,
                         Gravity.CENTER
                     );
-                    wrapLp.topMargin = dp(12, density);
-                    wrapLp.bottomMargin = dp(12, density);
+                    wrapLp.topMargin = dp(24, density);
+                    wrapLp.bottomMargin = dp(24, density);
                     scrollWrapper.setLayoutParams(wrapLp);
 
                     handle.setVisibility(View.GONE);
-                    sheetBg.setCornerRadius(dp(20, density));
-                    sheet.setPadding(dp(20, density), dp(8, density), dp(20, density), dp(10, density));
+                    sheetBg.setCornerRadius(dp(18, density));
+                    sheet.setPadding(dp(20, density), dp(16, density), dp(20, density), dp(14, density));
                     handleLp.bottomMargin = 0;
                     idRowLp.topMargin = 0;
-                    infoCardLp.topMargin = dp(8, density);
-                    dlLp.topMargin = dp(8, density);
-                    obLblLp.topMargin = dp(8, density);
+                    infoCardLp.topMargin = dp(6, density);
+                    dlLp.topMargin = dp(6, density);
+                    obLblLp.topMargin = dp(6, density);
                     obRowLp.topMargin = dp(4, density);
-                    snoozeLblLp.topMargin = dp(8, density);
+                    snoozeLblLp.topMargin = dp(6, density);
                     scrollLp.topMargin = dp(4, density);
                     skipLp.topMargin = dp(6, density);
+                    scrollWrapper.post(() -> scrollWrapper.scrollTo(0, 0));
                 } else {
                     int maxCardHeight = (int) (totalHeight * 0.9f);
                     scrollWrapper.setMaxHeight(maxCardHeight);
