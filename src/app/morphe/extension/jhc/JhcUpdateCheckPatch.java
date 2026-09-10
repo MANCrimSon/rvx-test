@@ -96,8 +96,8 @@ public class JhcUpdateCheckPatch {
     private static final long STARTUP_DELAY_MS = 10000L;
     // 24 hours cooldown between automatic background checks
     private static final long API_COOLDOWN_MS = 86_400_000L;
-    // 26 for this build (so Release 27 will be detected as new update)
-    private static final int EMBEDDED_BUILD_CODE = 410;
+    // 409 for test build (so Release 410 of YouTube-ReVanced-Extended is detected)
+    private static final int EMBEDDED_BUILD_CODE = 409;
     // FALSE: dialog only appears if new update is available (and cooldown/snooze respected)
     private static final boolean FORCE_TEST_ALWAYS_SHOW = false;
 
