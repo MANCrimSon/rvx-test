@@ -14,6 +14,7 @@ patches-version = "dev"
 archive-dlurl = "https://archive.org/download/crimsonman/apks/com.google.android.youtube"
 # uptodown-dlurl = "https://youtube.en.uptodown.com/android"
 # apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube"
+addon-patches = "bin/update-check.mpp"
 
 [YouTube-Music-Extended]
 enabled = false
@@ -28,6 +29,7 @@ archive-dlurl = "https://archive.org/download/crimsonman/apks/com.google.android
 # uptodown-dlurl = "https://youtube-music.en.uptodown.com/android"
 # apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube-music"
 included-patches = "'Disable music video in album'" 
+addon-patches = "bin/update-check.mpp"
 
 [YouTube-Morphe]
 enabled = true
@@ -42,7 +44,7 @@ archive-dlurl = "https://archive.org/download/crimsonman/apks/com.google.android
 # apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube"
 included-patches = "'Clone app'"
 patcher-args = "--options-file=bin/options.json"
-addon-patches = "bin/MANCrimSon-update-check.mpp"
+addon-patches = "bin/update-check.mpp"
 
 [YouTube-Music-Morphe]
 enabled = false
@@ -56,3 +58,4 @@ patches-version = "dev"
 archive-dlurl = "https://archive.org/download/crimsonman/apks/com.google.android.apps.youtube.music"
 # uptodown-dlurl = "https://youtube-music.en.uptodown.com/android"
 # apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube-music"
+addon-patches = "bin/update-check.mpp"
