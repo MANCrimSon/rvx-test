@@ -57,8 +57,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class JhcUpdateCheckPatch {
-    private static final String TAG = "CrimsonUpdate";
-    private static final String PREFS_NAME = "crimson_update_prefs";
+    private static final String TAG = "MANCrimSon_update";
+    private static final String PREFS_NAME = "mancrimson_update_prefs";
     private static final String KEY_SNOOZE_UNTIL = "snooze_until";
     private static final String KEY_SNOOZED_TAG = "snoozed_tag";
     private static final String KEY_SKIPPED_TAG = "skipped_tag";
@@ -66,12 +66,28 @@ public class JhcUpdateCheckPatch {
     private static final String KEY_LAST_REMOTE_TAG = "last_remote_tag";
 
     // Target repository
-    private static final String REPO_OWNER_NAME = "MANCrimSon/rvx-test";
+    private static final String REPO_OWNER_NAME = "MANCrimSon/YouTube-ReVanced-Extended";
     private static final String REPO_RELEASES_API = "https://api.github.com/repos/" + REPO_OWNER_NAME + "/releases?per_page=10";
 
-    // Obtainium deep link for test package
-    private static final String OBTAINIUM_DEEP_LINK = 
-        "obtainium://app/%7B%22id%22%3A%22app.morphe.android.youtube.test%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FMANCrimSon%2Frvx-test%22%2C%22author%22%3A%22MANCrimSon%22%2C%22name%22%3A%22YouTube%20Morphe%20%28Test%29%22%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Atrue%2C%5C%22fallbackToOlderReleases%5C%22%3Atrue%2C%5C%22versionDetection%5C%22%3Afalse%2C%5C%22apkFilterRegEx%5C%22%3A%5C%22%5Eyoutube-morphe%5C%22%2C%5C%22autoApkFilterByArch%5C%22%3Afalse%7D%22%7D";
+    private static String getObtainiumDeepLink(Context context) {
+        String pkg = (context != null) ? context.getPackageName().toLowerCase(Locale.ROOT) : "";
+        boolean isMusic = pkg.contains("music");
+        boolean isAnddea = pkg.contains("anddea") || pkg.contains("rvx");
+
+        if (isMusic) {
+            if (isAnddea) {
+                return "obtainium://app/%7B%22id%22%3A%22anddea.youtube.music%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FMANCrimSon%2FYouTube-ReVanced-Extended%22%2C%22author%22%3A%22MANCrimSon%22%2C%22name%22%3A%22YT%20Music%20RVX%20%28anddea%29%22%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Atrue%2C%5C%22fallbackToOlderReleases%5C%22%3Atrue%2C%5C%22versionDetection%5C%22%3Afalse%2C%5C%22apkFilterRegEx%5C%22%3A%5C%22%5Eyoutube-music-revanced-extended%5C%22%2C%5C%22autoApkFilterByArch%5C%22%3Atrue%2C%5C%22appName%5C%22%3A%5C%22YT%20Music%20RVX%20%28anddea%29%5C%22%7D%22%7D";
+            } else {
+                return "obtainium://app/%7B%22id%22%3A%22app.morphe.android.apps.youtube.music%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FMANCrimSon%2FYouTube-ReVanced-Extended%22%2C%22author%22%3A%22MANCrimSon%22%2C%22name%22%3A%22YT%20Music%20Morphe%22%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Atrue%2C%5C%22fallbackToOlderReleases%5C%22%3Atrue%2C%5C%22versionDetection%5C%22%3Afalse%2C%5C%22apkFilterRegEx%5C%22%3A%5C%22%5Eyoutube-music-morphe%5C%22%2C%5C%22autoApkFilterByArch%5C%22%3Atrue%7D%22%7D";
+            }
+        } else {
+            if (isAnddea) {
+                return "obtainium://app/%7B%22id%22%3A%22anddea.youtube%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FMANCrimSon%2FYouTube-ReVanced-Extended%22%2C%22author%22%3A%22MANCrimSon%22%2C%22name%22%3A%22YouTube%20RVX%20%28anddea%29%22%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Atrue%2C%5C%22fallbackToOlderReleases%5C%22%3Atrue%2C%5C%22versionDetection%5C%22%3Afalse%2C%5C%22apkFilterRegEx%5C%22%3A%5C%22%5Eyoutube-revanced-extended%5C%22%2C%5C%22autoApkFilterByArch%5C%22%3Afalse%2C%5C%22appName%5C%22%3A%5C%22YouTube%20RVX%20%28anddea%29%5C%22%7D%22%7D";
+            } else {
+                return "obtainium://app/%7B%22id%22%3A%22app.morphe.android.youtube%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FMANCrimSon%2FYouTube-ReVanced-Extended%22%2C%22author%22%3A%22MANCrimSon%22%2C%22name%22%3A%22YouTube%20Morphe%22%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Atrue%2C%5C%22fallbackToOlderReleases%5C%22%3Atrue%2C%5C%22versionDetection%5C%22%3Afalse%2C%5C%22apkFilterRegEx%5C%22%3A%5C%22%5Eyoutube-morphe%5C%22%2C%5C%22autoApkFilterByArch%5C%22%3Afalse%7D%22%7D";
+            }
+        }
+    }
     private static final String OBTAINIUM_DOWNLOAD_URL = "https://github.com/ImranR98/Obtainium/releases/latest";
 
     private static final String ACTION_MANUAL_CHECK = "app.morphe.action.CHECK_UPDATES";
@@ -269,7 +285,7 @@ public class JhcUpdateCheckPatch {
                 HttpURLConnection conn = (HttpURLConnection) new URL(REPO_RELEASES_API).openConnection();
                 conn.setRequestMethod("GET");
                 conn.setRequestProperty("Accept", "application/vnd.github+json");
-                conn.setRequestProperty("User-Agent", "Crimson-Update-Checker");
+                conn.setRequestProperty("User-Agent", "MANCrimSon-Update-Checker");
                 conn.setConnectTimeout(6000);
                 conn.setReadTimeout(6000);
 
@@ -293,7 +309,7 @@ public class JhcUpdateCheckPatch {
                         JSONArray assets = rel.optJSONArray("assets");
                         if (assets == null || assets.length() == 0) continue;
 
-                        String matchedUrl = findMatchingAsset(assets);
+                        String matchedUrl = findMatchingAsset(context, assets);
                         if (matchedUrl == null) continue;
 
                         String body = rel.optString("body", "");
@@ -371,18 +387,25 @@ public class JhcUpdateCheckPatch {
                                     while ((expLine = expReader.readLine()) != null) expSb.append(expLine);
                                     expReader.close();
                                     expConn.disconnect();
-                                    Matcher apkMatcher = Pattern.compile("href=\"([^\"]*releases/download/[^\"]+\\.apk)\"").matcher(expSb.toString());
-                                    if (apkMatcher.find()) {
-                                        String foundHref = apkMatcher.group(1);
-                                        downloadUrl = foundHref.startsWith("/") ? ("https://github.com" + foundHref) : foundHref;
+                                    Matcher linkMatcher = Pattern.compile("href=\"([^\"]*releases/download/[^\"]+)\"").matcher(expSb.toString());
+                                    java.util.List<String> expUrls = new java.util.ArrayList<>();
+                                    while (linkMatcher.find()) {
+                                        String foundHref = linkMatcher.group(1);
+                                        expUrls.add(foundHref.startsWith("/") ? ("https://github.com" + foundHref) : foundHref);
                                     }
+                                    downloadUrl = findMatchingUrl(context, expUrls);
                                 } else {
                                     expConn.disconnect();
                                 }
                             } catch (Throwable ignored) {}
 
                             if (downloadUrl == null) {
-                                downloadUrl = "https://github.com/" + REPO_OWNER_NAME + "/releases/download/" + targetTag + "/youtube-morphe-v" + appVersion + "-all.apk";
+                                String fbPkg = (context != null) ? context.getPackageName().toLowerCase(Locale.ROOT) : "";
+                                boolean fbMusic = fbPkg.contains("music");
+                                boolean fbRoot = fbPkg.startsWith("com.google.android");
+                                String appPrefix = fbMusic ? "youtube-music-morphe" : "youtube-morphe";
+                                String ext = fbRoot ? "-module-v" + appVersion + "-all.zip" : "-v" + appVersion + "-all.apk";
+                                downloadUrl = "https://github.com/" + REPO_OWNER_NAME + "/releases/download/" + targetTag + "/" + appPrefix + ext;
                             }
 
                             Matcher chMatcher = Pattern.compile("href=\"(https://github\\.com/[^\"]*patches/releases/tag/[^\"]+)\"").matcher(atom);
@@ -495,7 +518,9 @@ public class JhcUpdateCheckPatch {
         return null;
     }
 
-    private static String findMatchingAsset(JSONArray assets) {
+    private static String findMatchingUrl(Context context, java.util.List<String> urls) {
+        if (urls == null || urls.isEmpty()) return null;
+
         boolean is64Bit = false;
         if (Build.SUPPORTED_ABIS != null) {
             for (String abi : Build.SUPPORTED_ABIS) {
@@ -506,19 +531,34 @@ public class JhcUpdateCheckPatch {
             }
         }
 
+        String pkg = (context != null) ? context.getPackageName().toLowerCase(Locale.ROOT) : "";
+        boolean isMusic = pkg.contains("music");
+        boolean isRoot = pkg.startsWith("com.google.android");
+
         String allApkUrl = null;
         String archApkUrl = null;
 
-        for (int i = 0; i < assets.length(); i++) {
-            JSONObject asset = assets.optJSONObject(i);
-            if (asset == null) continue;
+        for (String url : urls) {
+            if (url == null || url.isEmpty()) continue;
+            String name = url.toLowerCase(Locale.ROOT);
+            int lastSlash = name.lastIndexOf('/');
+            if (lastSlash != -1) name = name.substring(lastSlash + 1);
 
-            String name = asset.optString("name", "").toLowerCase(Locale.ROOT);
-            String url = asset.optString("browser_download_url", "");
+            // If root: look for Magisk/KernelSU module .zip
+            if (isRoot) {
+                if (!name.endsWith(".zip") || !name.contains("module")) continue;
+                if (isMusic && !name.contains("music")) continue;
+                if (!isMusic && name.contains("music")) continue;
+                return url;
+            }
 
-            if (!name.endsWith(".apk") || !name.contains("youtube") || name.contains("module")) {
+            // If non-root: look for .apk (excluding modules)
+            if (!name.endsWith(".apk") || name.contains("module")) {
                 continue;
             }
+
+            if (isMusic && !name.contains("music")) continue;
+            if (!isMusic && name.contains("music")) continue;
 
             if (name.contains("-all.apk")) {
                 allApkUrl = url;
@@ -531,6 +571,19 @@ public class JhcUpdateCheckPatch {
         }
 
         return archApkUrl != null ? archApkUrl : allApkUrl;
+    }
+
+    private static String findMatchingAsset(Context context, JSONArray assets) {
+        if (assets == null) return null;
+        java.util.List<String> urls = new java.util.ArrayList<>();
+        for (int i = 0; i < assets.length(); i++) {
+            JSONObject asset = assets.optJSONObject(i);
+            if (asset != null) {
+                String u = asset.optString("browser_download_url", "");
+                if (!u.isEmpty()) urls.add(u);
+            }
+        }
+        return findMatchingUrl(context, urls);
     }
 
     private static String extractVersionFromUrl(String url) {
@@ -810,37 +863,18 @@ public class JhcUpdateCheckPatch {
             idRowLp.topMargin = dp(12, density);
             identityRow.setLayoutParams(idRowLp);
 
-            View iconBox;
-            Drawable appIcon = null;
-            try {
-                appIcon = activity.getPackageManager().getApplicationIcon(activity.getPackageName());
-            } catch (Throwable ignored) {}
-
-            if (appIcon != null) {
-                android.widget.ImageView iv = new android.widget.ImageView(activity);
-                iv.setImageDrawable(appIcon);
-                iv.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
-                GradientDrawable iconBg = new GradientDrawable();
-                iconBg.setColor(colIconBg);
-                iconBg.setCornerRadius(dp(14, density));
-                iv.setBackground(iconBg);
-                iv.setPadding(dp(4, density), dp(4, density), dp(4, density), dp(4, density));
-                iconBox = iv;
-            } else {
-                TextView tv = new TextView(activity);
-                tv.setText(emoji(0x1F680));
-                tv.setTextSize(22);
-                tv.setGravity(Gravity.CENTER);
-                GradientDrawable iconBg = new GradientDrawable();
-                iconBg.setColor(colIconBg);
-                iconBg.setCornerRadius(dp(14, density));
-                tv.setBackground(iconBg);
-                iconBox = tv;
-            }
-
+            TextView iconBox = new TextView(activity);
+            iconBox.setText(emoji(0x1F680));
+            iconBox.setTextSize(22);
+            iconBox.setGravity(Gravity.CENTER);
             LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams(dp(44, density), dp(44, density));
             iconLp.rightMargin = dp(12, density);
             iconBox.setLayoutParams(iconLp);
+
+            GradientDrawable iconBg = new GradientDrawable();
+            iconBg.setColor(colIconBg);
+            iconBg.setCornerRadius(dp(14, density));
+            iconBox.setBackground(iconBg);
             identityRow.addView(iconBox);
 
             LinearLayout textBlock = new LinearLayout(activity);
@@ -940,8 +974,11 @@ public class JhcUpdateCheckPatch {
             infoCard.addView(changelogBtn);
             leftCol.addView(infoCard);
 
-            // 3. Primary Download Button
-            TextView downloadBtn = createButton(activity, getString("download_btn"), colPrimaryBtnBg, colPrimaryBtnText, density, 14);
+            // 3. Primary Download Button (APK for NonRoot, Magisk Module for Root)
+            String pkgName = activity.getPackageName().toLowerCase(Locale.ROOT);
+            boolean isRootApp = pkgName.startsWith("com.google.android");
+            String dlBtnText = isRootApp ? getString("download_btn_root") : getString("download_btn");
+            TextView downloadBtn = createButton(activity, dlBtnText, colPrimaryBtnBg, colPrimaryBtnText, density, 14);
             LinearLayout.LayoutParams dlLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(42, density));
             dlLp.topMargin = dp(10, density);
             downloadBtn.setLayoutParams(dlLp);
@@ -984,7 +1021,7 @@ public class JhcUpdateCheckPatch {
             importBtn.setLayoutParams(importLp);
             importBtn.setOnClickListener(v -> {
                 try {
-                    Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(OBTAINIUM_DEEP_LINK));
+                    Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(getObtainiumDeepLink(activity)));
                     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                     activity.startActivity(intent);
                 } catch (ActivityNotFoundException ex) {
@@ -1052,7 +1089,9 @@ public class JhcUpdateCheckPatch {
                     .remove(KEY_SNOOZED_TAG)
                     .remove(KEY_SKIPPED_TAG)
                     .apply();
-                dialog.dismiss();
+                snoozeLabel.setText(getString("snooze_label"));
+                snoozeLabel.setTextColor(colSubtitle);
+                resetBtn.setVisibility(View.GONE);
                 showToast(activity, getString("toast_snooze_reset"));
             });
             snoozeHeader.addView(resetBtn);
@@ -1400,6 +1439,7 @@ public class JhcUpdateCheckPatch {
                 case "info_build_label": return "Номер збірки:";
                 case "info_changelog_btn": return "🐙  Список змін на GitHub  ↗";
                 case "download_btn": return "⬇️  Завантажити APK";
+                case "download_btn_root": return "⬇️  Завантажити модуль (Root)";
                 case "obtainium_label": return "ОНОВЛЕННЯ ЧЕРЕЗ OBTAINIUM:";
                 case "obtainium_open": return emoji(0x1F4F1) + "  Відкрити Obtainium";
                 case "obtainium_import": return "➕  Імпорт профілю";
@@ -1435,6 +1475,7 @@ public class JhcUpdateCheckPatch {
                 case "info_build_label": return "Номер сборки:";
                 case "info_changelog_btn": return "🐙  Список изменений на GitHub  ↗";
                 case "download_btn": return "⬇️  Скачать APK";
+                case "download_btn_root": return "⬇️  Скачать модуль (Root)";
                 case "obtainium_label": return "ОБНОВЛЕНИЕ ЧЕРЕЗ OBTAINIUM:";
                 case "obtainium_open": return emoji(0x1F4F1) + "  Открыть Obtainium";
                 case "obtainium_import": return "➕  Импорт профиля";
@@ -1470,6 +1511,7 @@ public class JhcUpdateCheckPatch {
                 case "info_build_label": return "Número de build:";
                 case "info_changelog_btn": return "🐙  Registro de cambios en GitHub  ↗";
                 case "download_btn": return "⬇️  Descargar APK";
+                case "download_btn_root": return "⬇️  Descargar módulo (Root)";
                 case "obtainium_label": return "ACTUALIZACIÓN VÍA OBTAINIUM:";
                 case "obtainium_open": return emoji(0x1F4F1) + "  Abrir Obtainium";
                 case "obtainium_import": return "➕  Importar perfil";
@@ -1505,6 +1547,7 @@ public class JhcUpdateCheckPatch {
                 case "info_build_label": return "Build-Nummer:";
                 case "info_changelog_btn": return "🐙  Changelog auf GitHub  ↗";
                 case "download_btn": return "⬇️  APK herunterladen";
+                case "download_btn_root": return "⬇️  Modul herunterladen (Root)";
                 case "obtainium_label": return "AKTUALISIERUNG ÜBER OBTAINIUM:";
                 case "obtainium_open": return emoji(0x1F4F1) + "  Obtainium öffnen";
                 case "obtainium_import": return "➕  Profil importieren";
@@ -1540,6 +1583,7 @@ public class JhcUpdateCheckPatch {
             case "info_build_label": return "Build number:";
             case "info_changelog_btn": return "🐙  Changelog on GitHub  ↗";
             case "download_btn": return "⬇️  Download APK";
+            case "download_btn_root": return "⬇️  Download Module (Root)";
             case "obtainium_label": return "UPDATE VIA OBTAINIUM:";
             case "obtainium_open": return emoji(0x1F4F1) + "  Open Obtainium";
             case "obtainium_import": return "➕  Import Profile";
