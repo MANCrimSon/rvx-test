@@ -830,7 +830,6 @@ public class JhcUpdateCheckPatch {
             changelogBtn.setTextSize(12);
             changelogBtn.setTypeface(Typeface.DEFAULT_BOLD);
             changelogBtn.setOnClickListener(v -> {
-                dialog.dismiss();
                 openUrl(activity, changelogUrl);
             });
             infoCard.addView(changelogBtn);
@@ -871,7 +870,6 @@ public class JhcUpdateCheckPatch {
             openLp.rightMargin = dp(6, density);
             openObtainiumBtn.setLayoutParams(openLp);
             openObtainiumBtn.setOnClickListener(v -> {
-                dialog.dismiss();
                 launchObtainium(activity);
             });
             obtainiumRow.addView(openObtainiumBtn);
@@ -880,7 +878,6 @@ public class JhcUpdateCheckPatch {
             LinearLayout.LayoutParams importLp = new LinearLayout.LayoutParams(0, dp(38, density), 1.0f);
             importBtn.setLayoutParams(importLp);
             importBtn.setOnClickListener(v -> {
-                dialog.dismiss();
                 try {
                     Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(OBTAINIUM_DEEP_LINK));
                     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
