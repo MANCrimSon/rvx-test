@@ -103,6 +103,13 @@ public class JhcUpdateCheckPatch {
 
     public static void checkUpdate(Context context) {
         if (context == null) return;
+        try {
+            String pkg = context.getPackageName().toLowerCase(Locale.ROOT);
+            if (pkg.startsWith("com.google.android")) {
+                // Root installation: in-app updater disabled (updates handled via Magisk/KernelSU)
+                return;
+            }
+        } catch (Throwable ignored) {}
 
         registerLifecycleIfNeeded(context);
         registerShortcut(context);

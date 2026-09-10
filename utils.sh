@@ -988,10 +988,13 @@ build_rv() {
 		fi
 
 		local apk_output="${BUILD_DIR}/${app_name_l}-${rv_brand_f}-v${version_f}-${arch_f}.apk"
-		local cur_addon_patches="${args[addon_patches]}"
-		if [ "$build_mode" != "apk" ]; then
-			cur_addon_patches=""
-		fi
+		local cur_addon_patches=""
+		for addon in ${args[addon_patches]}; do
+			if [ "$build_mode" != "apk" ] && [[ "${addon,,}" == *"update-check"* ]]; then
+				continue
+			fi
+			cur_addon_patches+=" $addon"
+		done
 		if [ "${NORB:-}" != true ] || { [ ! -f "$patched_apk" ] && [ ! -f "$apk_output" ]; }; then
 			if ! patch_apk "$stock_apk_to_patch" "$patched_apk" "${patcher_args[*]}" "${args[cli]}" "${args[ptjar]}" "$cur_addon_patches"; then
 				epr "Building '${table}' failed!"
