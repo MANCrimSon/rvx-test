@@ -11,20 +11,14 @@ repo_dir = os.path.dirname(os.path.abspath(__file__))
 java_src = os.path.join(repo_dir, 'src', 'app', 'morphe', 'extension', 'jhc', 'JhcUpdateCheckPatch.java')
 mpp_file = os.path.join(repo_dir, 'bin', 'update-check.mpp')
 
-# 1. Substitute environment variables if set (e.g. in GitHub Actions)
-github_repo = os.environ.get('GITHUB_REPOSITORY', '').strip()
+# 1. Substitute build code if set (e.g. in GitHub Actions)
 next_ver = os.environ.get('NEXT_VER_CODE', '').strip()
 
-if github_repo or next_ver:
-    print(f'[0/4] Injecting build parameters: REPO={github_repo or "none"}, BUILD={next_ver or "none"}')
+if next_ver and next_ver.isdigit():
+    print(f'[0/4] Injecting build number: BUILD={next_ver}')
     with open(java_src, 'r', encoding='utf-8') as f:
         src_content = f.read()
-
-    if github_repo:
-        src_content = re.sub(r'REPO_OWNER_NAME = ".*?";', f'REPO_OWNER_NAME = "{github_repo}";', src_content)
-    if next_ver and next_ver.isdigit():
-        src_content = re.sub(r'EMBEDDED_BUILD_CODE = [0-9]+;', f'EMBEDDED_BUILD_CODE = {next_ver};', src_content)
-
+    src_content = re.sub(r'EMBEDDED_BUILD_CODE = [0-9]+;', f'EMBEDDED_BUILD_CODE = {next_ver};', src_content)
     with open(java_src, 'w', encoding='utf-8') as f:
         f.write(src_content)
 

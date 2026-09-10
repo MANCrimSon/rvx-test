@@ -74,62 +74,18 @@ public class JhcUpdateCheckPatch {
         boolean isMusic = pkg.contains("music");
         boolean isAnddea = pkg.contains("anddea") || pkg.contains("rvx");
 
-        String appId;
-        String appName;
-        String apkFilter;
-        boolean filterByArch;
-
         if (isMusic) {
             if (isAnddea) {
-                appId = "anddea.youtube.music";
-                appName = "YT Music RVX (anddea)";
-                apkFilter = "^youtube-music-revanced-extended";
-                filterByArch = true;
+                return "obtainium://app/%7B%22id%22%3A%22anddea.youtube.music%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FMANCrimSon%2FYouTube-ReVanced-Extended%22%2C%22author%22%3A%22MANCrimSon%22%2C%22name%22%3A%22YT%20Music%20RVX%20%28anddea%29%22%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Atrue%2C%5C%22fallbackToOlderReleases%5C%22%3Atrue%2C%5C%22versionDetection%5C%22%3Afalse%2C%5C%22apkFilterRegEx%5C%22%3A%5C%22%5Eyoutube-music-revanced-extended%5C%22%2C%5C%22autoApkFilterByArch%5C%22%3Atrue%2C%5C%22appName%5C%22%3A%5C%22YT%20Music%20RVX%20%28anddea%29%5C%22%7D%22%7D";
             } else {
-                appId = "app.morphe.android.apps.youtube.music";
-                appName = "YT Music Morphe";
-                apkFilter = "^youtube-music-morphe";
-                filterByArch = true;
+                return "obtainium://app/%7B%22id%22%3A%22app.morphe.android.apps.youtube.music%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FMANCrimSon%2FYouTube-ReVanced-Extended%22%2C%22author%22%3A%22MANCrimSon%22%2C%22name%22%3A%22YT%20Music%20Morphe%22%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Atrue%2C%5C%22fallbackToOlderReleases%5C%22%3Atrue%2C%5C%22versionDetection%5C%22%3Afalse%2C%5C%22apkFilterRegEx%5C%22%3A%5C%22%5Eyoutube-music-morphe%5C%22%2C%5C%22autoApkFilterByArch%5C%22%3Atrue%7D%22%7D";
             }
         } else {
             if (isAnddea) {
-                appId = "anddea.youtube";
-                appName = "YouTube RVX (anddea)";
-                apkFilter = "^youtube-revanced-extended";
-                filterByArch = false;
+                return "obtainium://app/%7B%22id%22%3A%22anddea.youtube%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FMANCrimSon%2FYouTube-ReVanced-Extended%22%2C%22author%22%3A%22MANCrimSon%22%2C%22name%22%3A%22YouTube%20RVX%20%28anddea%29%22%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Atrue%2C%5C%22fallbackToOlderReleases%5C%22%3Atrue%2C%5C%22versionDetection%5C%22%3Afalse%2C%5C%22apkFilterRegEx%5C%22%3A%5C%22%5Eyoutube-revanced-extended%5C%22%2C%5C%22autoApkFilterByArch%5C%22%3Afalse%2C%5C%22appName%5C%22%3A%5C%22YouTube%20RVX%20%28anddea%29%5C%22%7D%22%7D";
             } else {
-                appId = "app.morphe.android.youtube";
-                appName = "YouTube Morphe";
-                apkFilter = "^youtube-morphe";
-                filterByArch = false;
+                return "obtainium://app/%7B%22id%22%3A%22app.morphe.android.youtube%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FMANCrimSon%2FYouTube-ReVanced-Extended%22%2C%22author%22%3A%22MANCrimSon%22%2C%22name%22%3A%22YouTube%20Morphe%22%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Atrue%2C%5C%22fallbackToOlderReleases%5C%22%3Atrue%2C%5C%22versionDetection%5C%22%3Afalse%2C%5C%22apkFilterRegEx%5C%22%3A%5C%22%5Eyoutube-morphe%5C%22%2C%5C%22autoApkFilterByArch%5C%22%3Afalse%7D%22%7D";
             }
-        }
-
-        String repoUrl = "https://github.com/" + REPO_OWNER_NAME;
-        String author = REPO_OWNER_NAME.contains("/") ? REPO_OWNER_NAME.split("/")[0] : REPO_OWNER_NAME;
-
-        try {
-            JSONObject addSettings = new JSONObject();
-            addSettings.put("includePrereleases", true);
-            addSettings.put("fallbackToOlderReleases", true);
-            addSettings.put("versionDetection", false);
-            addSettings.put("apkFilterRegEx", apkFilter);
-            addSettings.put("autoApkFilterByArch", filterByArch);
-            if (isAnddea) {
-                addSettings.put("appName", appName);
-            }
-
-            JSONObject root = new JSONObject();
-            root.put("id", appId);
-            root.put("url", repoUrl);
-            root.put("author", author);
-            root.put("name", appName);
-            root.put("additionalSettings", addSettings.toString());
-
-            return "obtainium://app/" + Uri.encode(root.toString());
-        } catch (Throwable t) {
-            Log.e(TAG, "Failed to build Obtainium link", t);
-            return "obtainium://app/%7B%22url%22%3A%22" + Uri.encode(repoUrl) + "%22%7D";
         }
     }
     private static final String OBTAINIUM_DOWNLOAD_URL = "https://github.com/ImranR98/Obtainium/releases/latest";
