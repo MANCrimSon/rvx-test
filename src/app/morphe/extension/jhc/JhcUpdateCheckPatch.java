@@ -12,6 +12,7 @@ import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
@@ -19,6 +20,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.DisplayMetrics;
 import android.util.Log;
+import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
@@ -36,6 +38,7 @@ import org.json.JSONObject;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.lang.reflect.Method;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.Locale;
@@ -269,13 +272,105 @@ public class JhcUpdateCheckPatch {
         }
     }
 
+    // --- ACCURATE THEME DETECTION (Morphe Utils, ThemeUtils, DecorView, Attributes, System) ---
     private static boolean isDarkTheme(Activity activity) {
+        if (activity == null) return true;
+
+        // 1. Morphe / ReVanced internal API via reflection
+        try {
+            Class<?> utilsClass = Class.forName("app.morphe.extension.shared.Utils");
+            Method isDarkMethod = utilsClass.getMethod("isDarkModeEnabled");
+            Object result = isDarkMethod.invoke(null);
+            if (result instanceof Boolean) {
+                boolean isDark = (Boolean) result;
+                Log.d(TAG, "Detected theme via Morphe Utils.isDarkModeEnabled: " + isDark);
+                return isDark;
+            }
+        } catch (Throwable t) {
+            Log.d(TAG, "Morphe Utils.isDarkModeEnabled not available: " + t.getMessage());
+        }
+
+        // 2. ThemeUtils getDialogBackgroundColor via reflection
+        try {
+            Class<?> themeUtilsClass = Class.forName("app.morphe.extension.shared.theme.ThemeUtils");
+            Method getBgMethod = themeUtilsClass.getMethod("getDialogBackgroundColor");
+            Object result = getBgMethod.invoke(null);
+            if (result instanceof Integer) {
+                int bg = (Integer) result;
+                boolean isDark = isColorDark(bg);
+                Log.d(TAG, "Detected theme via ThemeUtils.getDialogBackgroundColor: " + isDark);
+                return isDark;
+            }
+        } catch (Throwable ignored) {}
+
+        // 3. SharedPreferences of Morphe
+        try {
+            SharedPreferences sp = activity.getSharedPreferences(activity.getPackageName() + "_preferences", Context.MODE_PRIVATE);
+            if (sp.contains("morphe_theme_last_used_dark_mode")) {
+                boolean isDark = sp.getBoolean("morphe_theme_last_used_dark_mode", true);
+                Log.d(TAG, "Detected theme via Morphe SharedPreferences: " + isDark);
+                return isDark;
+            }
+        } catch (Throwable ignored) {}
+
+        // 4. Activity DecorView background color
+        try {
+            if (activity.getWindow() != null && activity.getWindow().getDecorView() != null) {
+                Drawable decorBg = activity.getWindow().getDecorView().getBackground();
+                if (decorBg instanceof ColorDrawable) {
+                    int c = ((ColorDrawable) decorBg).getColor();
+                    if (c != 0) {
+                        boolean isDark = isColorDark(c);
+                        Log.d(TAG, "Detected theme via DecorView background: " + isDark);
+                        return isDark;
+                    }
+                }
+            }
+        } catch (Throwable ignored) {}
+
+        // 5. Activity Theme attributes (colorBackground, windowBackground, isLightTheme)
+        try {
+            TypedValue tv = new TypedValue();
+            if (activity.getTheme().resolveAttribute(android.R.attr.colorBackground, tv, true)) {
+                if (tv.type >= TypedValue.TYPE_FIRST_COLOR_INT && tv.type <= TypedValue.TYPE_LAST_COLOR_INT) {
+                    boolean isDark = isColorDark(tv.data);
+                    Log.d(TAG, "Detected theme via theme.colorBackground: " + isDark);
+                    return isDark;
+                }
+            }
+            if (activity.getTheme().resolveAttribute(android.R.attr.windowBackground, tv, true)) {
+                if (tv.type >= TypedValue.TYPE_FIRST_COLOR_INT && tv.type <= TypedValue.TYPE_LAST_COLOR_INT) {
+                    boolean isDark = isColorDark(tv.data);
+                    Log.d(TAG, "Detected theme via theme.windowBackground: " + isDark);
+                    return isDark;
+                }
+            }
+            if (activity.getTheme().resolveAttribute(android.R.attr.isLightTheme, tv, true)) {
+                boolean isDark = (tv.data == 0);
+                Log.d(TAG, "Detected theme via theme.isLightTheme: " + isDark);
+                return isDark;
+            }
+        } catch (Throwable ignored) {}
+
+        // 6. System Configuration uiMode
         try {
             int uiMode = activity.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
-            return uiMode != Configuration.UI_MODE_NIGHT_NO;
-        } catch (Exception e) {
-            return true;
-        }
+            if (uiMode == Configuration.UI_MODE_NIGHT_YES) {
+                Log.d(TAG, "Detected theme via system uiMode: NIGHT_YES");
+                return true;
+            } else if (uiMode == Configuration.UI_MODE_NIGHT_NO) {
+                Log.d(TAG, "Detected theme via system uiMode: NIGHT_NO");
+                return false;
+            }
+        } catch (Throwable ignored) {}
+
+        // Default to dark theme for YouTube
+        return true;
+    }
+
+    private static boolean isColorDark(int color) {
+        double lum = (0.299 * Color.red(color) + 0.587 * Color.green(color) + 0.114 * Color.blue(color)) / 255.0;
+        return lum < 0.5;
     }
 
     // --- UI DIALOG (Dynamic Light / Dark Theme & Adaptive Portrait / Landscape) ---
@@ -293,7 +388,17 @@ public class JhcUpdateCheckPatch {
             boolean dark = isDarkTheme(activity);
 
             // Palette Definition
-            final int colCardBg = dark ? Color.parseColor("#1C1C1E") : Color.WHITE;
+            int darkCardBg = Color.parseColor("#1C1C1E");
+            try {
+                Class<?> themeUtilsClass = Class.forName("app.morphe.extension.shared.theme.ThemeUtils");
+                Method getBgMethod = themeUtilsClass.getMethod("getDialogBackgroundColor");
+                int morpheBg = (Integer) getBgMethod.invoke(null);
+                if (morpheBg != 0) {
+                    darkCardBg = morpheBg;
+                }
+            } catch (Throwable ignored) {}
+
+            final int colCardBg = dark ? darkCardBg : Color.WHITE;
             final int colBackdrop = dark ? Color.parseColor("#80000000") : Color.parseColor("#50000000");
             final int colTitle = dark ? Color.WHITE : Color.parseColor("#0F0F0F");
             final int colSubtitle = dark ? Color.parseColor("#8E8E93") : Color.parseColor("#606060");
@@ -429,7 +534,7 @@ public class JhcUpdateCheckPatch {
             obtainiumTitle.setTextColor(colSubtitle);
             sheet.addView(obtainiumTitle);
 
-            // Obtainium actions row: [ 🚀 Открыть Obtainium ] [ 📲 Импорт профиля ]
+            // Obtainium actions row: [ 📱 Открыть Obtainium ] [ ➕ Импорт профиля ]
             LinearLayout obtainiumRow = new LinearLayout(activity);
             obtainiumRow.setOrientation(LinearLayout.HORIZONTAL);
 
@@ -524,7 +629,6 @@ public class JhcUpdateCheckPatch {
                 if (isLandscape) {
                     // Landscape: Centered modal card, constrained width, compact vertical padding
                     int cardWidth = Math.min(totalWidth - dp(32, density), dp(520, density));
-                    int maxAllowedHeight = totalHeight - dp(24, density);
 
                     FrameLayout.LayoutParams wrapLp = new FrameLayout.LayoutParams(
                         cardWidth,
@@ -777,24 +881,31 @@ public class JhcUpdateCheckPatch {
         return new String(Character.toChars(codePoint));
     }
 
-    // --- MULTILINGUAL DICTIONARY (Ukrainian, Russian, English + 13 others) ---
+    // --- MULTILINGUAL DICTIONARY (Non-duplicating Functional Icons) ---
+    // Title: 🔔 (0x1F514 Bell - Notification)
+    // Download: ⬇️ (\u2B07\uFE0F Down Arrow - Download APK)
+    // Obtainium Title: 🔄 (0x1F504 Cycle Arrows - Auto-sync/Repo)
+    // Obtainium Open: 📱 (0x1F4F1 Mobile Phone - Launch App)
+    // Obtainium Import: ➕ (\u2795 Plus Sign - Add App/Import)
+    // Remind later: ⏰ (\u23F0 Alarm Clock - Snooze)
+    // Skip: ✕ (\u2715 Cross - Skip build)
     private static String getString(String key) {
         String lang = Locale.getDefault().getLanguage().toLowerCase(Locale.ROOT);
 
-        // Ukrainian (full dedicated translation)
+        // Ukrainian
         if (lang.equals("uk") || lang.equals("ua")) {
             switch (key) {
-                case "title": return emoji(0x1F680) + "  Доступне оновлення";
+                case "title": return emoji(0x1F514) + "  Доступне оновлення";
                 case "subtitle_fmt": return "Збірка %s";
                 case "patches_fmt": return "Патчі: %s";
-                case "download_btn": return emoji(0x1F4E5) + "  ЗАВАНТАЖИТИ APK";
-                case "obtainium_title": return emoji(0x1F4E6) + "  Оновлення через Obtainium:";
-                case "obtainium_open": return emoji(0x1F680) + " Відкрити Obtainium";
-                case "obtainium_import": return emoji(0x1F4F2) + " Імпорт профілю";
-                case "remind_label": return "\u23F1  Нагадати пізніше:";
+                case "download_btn": return "\u2B07\uFE0F  ЗАВАНТАЖИТИ APK";
+                case "obtainium_title": return emoji(0x1F504) + "  Оновлення через Obtainium:";
+                case "obtainium_open": return emoji(0x1F4F1) + " Відкрити Obtainium";
+                case "obtainium_import": return "\u2795 Імпорт профілю";
+                case "remind_label": return "\u23F0  Нагадати пізніше:";
                 case "chip_day": return "дн";
                 case "chip_1mo": return "1 місяць";
-                case "skip_btn": return "\u23ED  Пропустити цю збірку";
+                case "skip_btn": return "\u2715  Пропустити цю збірку";
                 case "toast_snoozed": return "Нагадування відкладено на %s";
                 case "toast_skipped": return "Збірку %s пропущено";
                 case "toast_install_obtainium": return "Встановіть Obtainium для автооновлень";
@@ -803,17 +914,17 @@ public class JhcUpdateCheckPatch {
         // Russian, Belarusian, Kazakh
         else if (lang.equals("ru") || lang.equals("be") || lang.equals("kk")) {
             switch (key) {
-                case "title": return emoji(0x1F680) + "  Доступно обновление";
+                case "title": return emoji(0x1F514) + "  Доступно обновление";
                 case "subtitle_fmt": return "Сборка %s";
                 case "patches_fmt": return "Патчи: %s";
-                case "download_btn": return emoji(0x1F4E5) + "  СКАЧАТЬ APK";
-                case "obtainium_title": return emoji(0x1F4E6) + "  Обновление через Obtainium:";
-                case "obtainium_open": return emoji(0x1F680) + " Открыть Obtainium";
-                case "obtainium_import": return emoji(0x1F4F2) + " Импорт профиля";
-                case "remind_label": return "\u23F1  Напомнить позже:";
+                case "download_btn": return "\u2B07\uFE0F  СКАЧАТЬ APK";
+                case "obtainium_title": return emoji(0x1F504) + "  Обновление через Obtainium:";
+                case "obtainium_open": return emoji(0x1F4F1) + " Открыть Obtainium";
+                case "obtainium_import": return "\u2795 Импорт профиля";
+                case "remind_label": return "\u23F0  Напомнить позже:";
                 case "chip_day": return "дн";
                 case "chip_1mo": return "1 месяц";
-                case "skip_btn": return "\u23ED  Пропустить этот билд";
+                case "skip_btn": return "\u2715  Пропустить этот билд";
                 case "toast_snoozed": return "Напоминание отложено на %s";
                 case "toast_skipped": return "Билд %s пропущен";
                 case "toast_install_obtainium": return "Установите Obtainium для автообновлений";
@@ -822,17 +933,17 @@ public class JhcUpdateCheckPatch {
         // Spanish
         else if (lang.equals("es")) {
             switch (key) {
-                case "title": return emoji(0x1F680) + "  Actualización disponible";
+                case "title": return emoji(0x1F514) + "  Actualización disponible";
                 case "subtitle_fmt": return "Versión %s";
                 case "patches_fmt": return "Parches: %s";
-                case "download_btn": return emoji(0x1F4E5) + "  DESCARGAR APK";
-                case "obtainium_title": return emoji(0x1F4E6) + "  Actualización vía Obtainium:";
-                case "obtainium_open": return emoji(0x1F680) + " Abrir Obtainium";
-                case "obtainium_import": return emoji(0x1F4F2) + " Importar perfil";
-                case "remind_label": return "\u23F1  Recordar más tarde:";
+                case "download_btn": return "\u2B07\uFE0F  DESCARGAR APK";
+                case "obtainium_title": return emoji(0x1F504) + "  Actualización vía Obtainium:";
+                case "obtainium_open": return emoji(0x1F4F1) + " Abrir Obtainium";
+                case "obtainium_import": return "\u2795 Importar perfil";
+                case "remind_label": return "\u23F0  Recordar más tarde:";
                 case "chip_day": return "d";
                 case "chip_1mo": return "1 mes";
-                case "skip_btn": return "\u23ED  Omitir esta versión";
+                case "skip_btn": return "\u2715  Omitir esta versión";
                 case "toast_snoozed": return "Recordatorio pospuesto por %s";
                 case "toast_skipped": return "Versión %s omitida";
                 case "toast_install_obtainium": return "Instala Obtainium para actualizaciones";
@@ -841,17 +952,17 @@ public class JhcUpdateCheckPatch {
         // Portuguese
         else if (lang.equals("pt")) {
             switch (key) {
-                case "title": return emoji(0x1F680) + "  Atualização disponível";
+                case "title": return emoji(0x1F514) + "  Atualização disponível";
                 case "subtitle_fmt": return "Versão %s";
                 case "patches_fmt": return "Patches: %s";
-                case "download_btn": return emoji(0x1F4E5) + "  BAIXAR APK";
-                case "obtainium_title": return emoji(0x1F4E6) + "  Atualização via Obtainium:";
-                case "obtainium_open": return emoji(0x1F680) + " Abrir Obtainium";
-                case "obtainium_import": return emoji(0x1F4F2) + " Importar perfil";
-                case "remind_label": return "\u23F1  Lembrar mais tarde:";
+                case "download_btn": return "\u2B07\uFE0F  BAIXAR APK";
+                case "obtainium_title": return emoji(0x1F504) + "  Atualização via Obtainium:";
+                case "obtainium_open": return emoji(0x1F4F1) + " Abrir Obtainium";
+                case "obtainium_import": return "\u2795 Importar perfil";
+                case "remind_label": return "\u23F0  Lembrar mais tarde:";
                 case "chip_day": return "d";
                 case "chip_1mo": return "1 mês";
-                case "skip_btn": return "\u23ED  Pular esta versão";
+                case "skip_btn": return "\u2715  Pular esta versão";
                 case "toast_snoozed": return "Lembrete adiado por %s";
                 case "toast_skipped": return "Versão %s pulada";
                 case "toast_install_obtainium": return "Instale o Obtainium para atualizações";
@@ -860,17 +971,17 @@ public class JhcUpdateCheckPatch {
         // German
         else if (lang.equals("de")) {
             switch (key) {
-                case "title": return emoji(0x1F680) + "  Update verfügbar";
+                case "title": return emoji(0x1F514) + "  Update verfügbar";
                 case "subtitle_fmt": return "Build %s";
                 case "patches_fmt": return "Patches: %s";
-                case "download_btn": return emoji(0x1F4E5) + "  APK HERUNTERLADEN";
-                case "obtainium_title": return emoji(0x1F4E6) + "  Aktualisierung über Obtainium:";
-                case "obtainium_open": return emoji(0x1F680) + " Obtainium öffnen";
-                case "obtainium_import": return emoji(0x1F4F2) + " Profil importieren";
-                case "remind_label": return "\u23F1  Später erinnern:";
+                case "download_btn": return "\u2B07\uFE0F  APK HERUNTERLADEN";
+                case "obtainium_title": return emoji(0x1F504) + "  Aktualisierung über Obtainium:";
+                case "obtainium_open": return emoji(0x1F4F1) + " Obtainium öffnen";
+                case "obtainium_import": return "\u2795 Profil importieren";
+                case "remind_label": return "\u23F0  Später erinnern:";
                 case "chip_day": return "T";
                 case "chip_1mo": return "1 Monat";
-                case "skip_btn": return "\u23ED  Diesen Build überspringen";
+                case "skip_btn": return "\u2715  Diesen Build überspringen";
                 case "toast_snoozed": return "Erinnerung verschoben um %s";
                 case "toast_skipped": return "Build %s übersprungen";
                 case "toast_install_obtainium": return "Installiere Obtainium für Updates";
@@ -879,17 +990,17 @@ public class JhcUpdateCheckPatch {
         // French
         else if (lang.equals("fr")) {
             switch (key) {
-                case "title": return emoji(0x1F680) + "  Mise à jour disponible";
+                case "title": return emoji(0x1F514) + "  Mise à jour disponible";
                 case "subtitle_fmt": return "Version %s";
                 case "patches_fmt": return "Patchs : %s";
-                case "download_btn": return emoji(0x1F4E5) + "  TÉLÉCHARGER L'APK";
-                case "obtainium_title": return emoji(0x1F4E6) + "  Mise à jour via Obtainium :";
-                case "obtainium_open": return emoji(0x1F680) + " Ouvrir Obtainium";
-                case "obtainium_import": return emoji(0x1F4F2) + " Importer profil";
-                case "remind_label": return "\u23F1  Rappeler plus tard :";
+                case "download_btn": return "\u2B07\uFE0F  TÉLÉCHARGER L'APK";
+                case "obtainium_title": return emoji(0x1F504) + "  Mise à jour via Obtainium :";
+                case "obtainium_open": return emoji(0x1F4F1) + " Ouvrir Obtainium";
+                case "obtainium_import": return "\u2795 Importer profil";
+                case "remind_label": return "\u23F0  Rappeler plus tard :";
                 case "chip_day": return "j";
                 case "chip_1mo": return "1 mois";
-                case "skip_btn": return "\u23ED  Ignorer cette version";
+                case "skip_btn": return "\u2715  Ignorer cette version";
                 case "toast_snoozed": return "Rappel reporté de %s";
                 case "toast_skipped": return "Version %s ignorée";
                 case "toast_install_obtainium": return "Installez Obtainium pour les mises à jour";
@@ -898,17 +1009,17 @@ public class JhcUpdateCheckPatch {
         // Italian
         else if (lang.equals("it")) {
             switch (key) {
-                case "title": return emoji(0x1F680) + "  Aggiornamento disponibile";
+                case "title": return emoji(0x1F514) + "  Aggiornamento disponibile";
                 case "subtitle_fmt": return "Versione %s";
                 case "patches_fmt": return "Patch: %s";
-                case "download_btn": return emoji(0x1F4E5) + "  SCARICA APK";
-                case "obtainium_title": return emoji(0x1F4E6) + "  Aggiornamento via Obtainium:";
-                case "obtainium_open": return emoji(0x1F680) + " Apri Obtainium";
-                case "obtainium_import": return emoji(0x1F4F2) + " Importa profilo";
-                case "remind_label": return "\u23F1  Ricorda più tardi:";
+                case "download_btn": return "\u2B07\uFE0F  SCARICA APK";
+                case "obtainium_title": return emoji(0x1F504) + "  Aggiornamento via Obtainium:";
+                case "obtainium_open": return emoji(0x1F4F1) + " Apri Obtainium";
+                case "obtainium_import": return "\u2795 Importa profilo";
+                case "remind_label": return "\u23F0  Ricorda più tardi:";
                 case "chip_day": return "g";
                 case "chip_1mo": return "1 mese";
-                case "skip_btn": return "\u23ED  Salta questa versione";
+                case "skip_btn": return "\u2715  Salta questa versione";
                 case "toast_snoozed": return "Promemoria posticipato di %s";
                 case "toast_skipped": return "Versione %s saltata";
                 case "toast_install_obtainium": return "Installa Obtainium per gli aggiornamenti";
@@ -917,17 +1028,17 @@ public class JhcUpdateCheckPatch {
         // Turkish
         else if (lang.equals("tr")) {
             switch (key) {
-                case "title": return emoji(0x1F680) + "  Güncelleme Mevcut";
+                case "title": return emoji(0x1F514) + "  Güncelleme Mevcut";
                 case "subtitle_fmt": return "Sürüm %s";
                 case "patches_fmt": return "Yamalar: %s";
-                case "download_btn": return emoji(0x1F4E5) + "  APK İNDİR";
-                case "obtainium_title": return emoji(0x1F4E6) + "  Obtainium ile Güncelleme:";
-                case "obtainium_open": return emoji(0x1F680) + " Obtainium Aç";
-                case "obtainium_import": return emoji(0x1F4F2) + " Profili İçe Aktar";
-                case "remind_label": return "\u23F1  Daha sonra hatırlat:";
+                case "download_btn": return "\u2B07\uFE0F  APK İNDİR";
+                case "obtainium_title": return emoji(0x1F504) + "  Obtainium ile Güncelleme:";
+                case "obtainium_open": return emoji(0x1F4F1) + " Obtainium Aç";
+                case "obtainium_import": return "\u2795 Profili İçe Aktar";
+                case "remind_label": return "\u23F0  Daha sonra hatırlat:";
                 case "chip_day": return "g";
                 case "chip_1mo": return "1 ay";
-                case "skip_btn": return "\u23ED  Bu sürümü atla";
+                case "skip_btn": return "\u2715  Bu sürümü atla";
                 case "toast_snoozed": return "Hatırlatıcı %s ertelendi";
                 case "toast_skipped": return "Sürüm %s atlandı";
                 case "toast_install_obtainium": return "Güncellemeler için Obtainium kurun";
@@ -936,17 +1047,17 @@ public class JhcUpdateCheckPatch {
         // Polish
         else if (lang.equals("pl")) {
             switch (key) {
-                case "title": return emoji(0x1F680) + "  Dostępna aktualizacja";
+                case "title": return emoji(0x1F514) + "  Dostępna aktualizacja";
                 case "subtitle_fmt": return "Wydanie %s";
                 case "patches_fmt": return "Łatki: %s";
-                case "download_btn": return emoji(0x1F4E5) + "  POBIERZ APK";
-                case "obtainium_title": return emoji(0x1F4E6) + "  Aktualizacja przez Obtainium:";
-                case "obtainium_open": return emoji(0x1F680) + " Otwórz Obtainium";
-                case "obtainium_import": return emoji(0x1F4F2) + " Importuj profil";
-                case "remind_label": return "\u23F1  Przypomnij później:";
+                case "download_btn": return "\u2B07\uFE0F  POBIERZ APK";
+                case "obtainium_title": return emoji(0x1F504) + "  Aktualizacja przez Obtainium:";
+                case "obtainium_open": return emoji(0x1F4F1) + " Otwórz Obtainium";
+                case "obtainium_import": return "\u2795 Importuj profil";
+                case "remind_label": return "\u23F0  Przypomnij później:";
                 case "chip_day": return "d";
                 case "chip_1mo": return "1 mies.";
-                case "skip_btn": return "\u23ED  Pomiń to wydanie";
+                case "skip_btn": return "\u2715  Pomiń to wydanie";
                 case "toast_snoozed": return "Przypomnienie odłożone o %s";
                 case "toast_skipped": return "Wydanie %s pominięte";
                 case "toast_install_obtainium": return "Zainstaluj Obtainium do aktualizacji";
@@ -955,17 +1066,17 @@ public class JhcUpdateCheckPatch {
         // Vietnamese
         else if (lang.equals("vi")) {
             switch (key) {
-                case "title": return emoji(0x1F680) + "  Có bản cập nhật mới";
+                case "title": return emoji(0x1F514) + "  Có bản cập nhật mới";
                 case "subtitle_fmt": return "Bản %s";
                 case "patches_fmt": return "Bản vá: %s";
-                case "download_btn": return emoji(0x1F4E5) + "  TẢI XUỐNG APK";
-                case "obtainium_title": return emoji(0x1F4E6) + "  Cập nhật qua Obtainium:";
-                case "obtainium_open": return emoji(0x1F680) + " Mở Obtainium";
-                case "obtainium_import": return emoji(0x1F4F2) + " Nhập cấu hình";
-                case "remind_label": return "\u23F1  Nhắc tôi sau:";
+                case "download_btn": return "\u2B07\uFE0F  TẢI XUỐNG APK";
+                case "obtainium_title": return emoji(0x1F504) + "  Cập nhật qua Obtainium:";
+                case "obtainium_open": return emoji(0x1F4F1) + " Mở Obtainium";
+                case "obtainium_import": return "\u2795 Nhập cấu hình";
+                case "remind_label": return "\u23F0  Nhắc tôi sau:";
                 case "chip_day": return "ng";
                 case "chip_1mo": return "1 tháng";
-                case "skip_btn": return "\u23ED  Bỏ qua bản này";
+                case "skip_btn": return "\u2715  Bỏ qua bản này";
                 case "toast_snoozed": return "Đã hoãn nhắc nhở %s";
                 case "toast_skipped": return "Đã bỏ qua bản %s";
                 case "toast_install_obtainium": return "Cài đặt Obtainium để tự động cập nhật";
@@ -974,17 +1085,17 @@ public class JhcUpdateCheckPatch {
         // Indonesian
         else if (lang.equals("id")) {
             switch (key) {
-                case "title": return emoji(0x1F680) + "  Pembaruan Tersedia";
+                case "title": return emoji(0x1F514) + "  Pembaruan Tersedia";
                 case "subtitle_fmt": return "Rilis %s";
                 case "patches_fmt": return "Tambalan: %s";
-                case "download_btn": return emoji(0x1F4E5) + "  UNDUH APK";
-                case "obtainium_title": return emoji(0x1F4E6) + "  Pembaruan via Obtainium:";
-                case "obtainium_open": return emoji(0x1F680) + " Buka Obtainium";
-                case "obtainium_import": return emoji(0x1F4F2) + " Impor Profil";
-                case "remind_label": return "\u23F1  Ingatkan nanti:";
+                case "download_btn": return "\u2B07\uFE0F  UNDUH APK";
+                case "obtainium_title": return emoji(0x1F504) + "  Pembaruan via Obtainium:";
+                case "obtainium_open": return emoji(0x1F4F1) + " Buka Obtainium";
+                case "obtainium_import": return "\u2795 Impor Profil";
+                case "remind_label": return "\u23F0  Ingatkan nanti:";
                 case "chip_day": return "hr";
                 case "chip_1mo": return "1 bulan";
-                case "skip_btn": return "\u23ED  Lewati versi ini";
+                case "skip_btn": return "\u2715  Lewati versi ini";
                 case "toast_snoozed": return "Pengingat ditunda %s";
                 case "toast_skipped": return "Versi %s dilewati";
                 case "toast_install_obtainium": return "Pasang Obtainium untuk pembaruan";
@@ -993,17 +1104,17 @@ public class JhcUpdateCheckPatch {
         // Arabic
         else if (lang.equals("ar")) {
             switch (key) {
-                case "title": return emoji(0x1F680) + "  تحديث متوفر";
+                case "title": return emoji(0x1F514) + "  تحديث متوفر";
                 case "subtitle_fmt": return "الإصدار %s";
                 case "patches_fmt": return "التصحيحات: %s";
-                case "download_btn": return emoji(0x1F4E5) + "  تحميل APK";
-                case "obtainium_title": return emoji(0x1F4E6) + "  التحديث عبر Obtainium:";
-                case "obtainium_open": return emoji(0x1F680) + " فتح Obtainium";
-                case "obtainium_import": return emoji(0x1F4F2) + " استيراد الملف";
-                case "remind_label": return "\u23F1  تذكير لاحقاً:";
+                case "download_btn": return "\u2B07\uFE0F  تحميل APK";
+                case "obtainium_title": return emoji(0x1F504) + "  التحديث عبر Obtainium:";
+                case "obtainium_open": return emoji(0x1F4F1) + " فتح Obtainium";
+                case "obtainium_import": return "\u2795 استيراد الملف";
+                case "remind_label": return "\u23F0  تذكير لاحقاً:";
                 case "chip_day": return "يوم";
                 case "chip_1mo": return "شهر";
-                case "skip_btn": return "\u23ED  تخطي هذا الإصدار";
+                case "skip_btn": return "\u2715  تخطي هذا الإصدار";
                 case "toast_snoozed": return "تم تأجيل التذكير لمدة %s";
                 case "toast_skipped": return "تم تخطي الإصدار %s";
                 case "toast_install_obtainium": return "قم بتثبيت Obtainium للتحديث التلقائي";
@@ -1012,17 +1123,17 @@ public class JhcUpdateCheckPatch {
         // Chinese
         else if (lang.equals("zh")) {
             switch (key) {
-                case "title": return emoji(0x1F680) + "  发现新版本";
+                case "title": return emoji(0x1F514) + "  发现新版本";
                 case "subtitle_fmt": return "构建 %s";
                 case "patches_fmt": return "补丁版本: %s";
-                case "download_btn": return emoji(0x1F4E5) + "  下载 APK";
-                case "obtainium_title": return emoji(0x1F4E6) + "  通过 Obtainium 更新:";
-                case "obtainium_open": return emoji(0x1F680) + " 打开 Obtainium";
-                case "obtainium_import": return emoji(0x1F4F2) + " 导入配置";
-                case "remind_label": return "\u23F1  稍后提醒:";
+                case "download_btn": return "\u2B07\uFE0F  下载 APK";
+                case "obtainium_title": return emoji(0x1F504) + "  通过 Obtainium 更新:";
+                case "obtainium_open": return emoji(0x1F4F1) + " 打开 Obtainium";
+                case "obtainium_import": return "\u2795 导入配置";
+                case "remind_label": return "\u23F0  稍后提醒:";
                 case "chip_day": return "天";
                 case "chip_1mo": return "1个月";
-                case "skip_btn": return "\u23ED  跳过此版本";
+                case "skip_btn": return "\u2715  跳过此版本";
                 case "toast_snoozed": return "提醒已推迟 %s";
                 case "toast_skipped": return "已跳过版本 %s";
                 case "toast_install_obtainium": return "请安装 Obtainium 以自动更新";
@@ -1031,17 +1142,17 @@ public class JhcUpdateCheckPatch {
         // Japanese
         else if (lang.equals("ja")) {
             switch (key) {
-                case "title": return emoji(0x1F680) + "  アップデートがあります";
+                case "title": return emoji(0x1F514) + "  アップデートがあります";
                 case "subtitle_fmt": return "ビルド %s";
                 case "patches_fmt": return "パッチ: %s";
-                case "download_btn": return emoji(0x1F4E5) + "  APKをダウンロード";
-                case "obtainium_title": return emoji(0x1F4E6) + "  Obtainiumで更新:";
-                case "obtainium_open": return emoji(0x1F680) + " Obtainiumを開く";
-                case "obtainium_import": return emoji(0x1F4F2) + " プロファイルをインポート";
-                case "remind_label": return "\u23F1  後で通知:";
+                case "download_btn": return "\u2B07\uFE0F  APKをダウンロード";
+                case "obtainium_title": return emoji(0x1F504) + "  Obtainiumで更新:";
+                case "obtainium_open": return emoji(0x1F4F1) + " Obtainiumを開く";
+                case "obtainium_import": return "\u2795 プロファイルをインポート";
+                case "remind_label": return "\u23F0  後で通知:";
                 case "chip_day": return "日";
                 case "chip_1mo": return "1ヶ月";
-                case "skip_btn": return "\u23ED  このビルドをスキップ";
+                case "skip_btn": return "\u2715  このビルドをスキップ";
                 case "toast_snoozed": return "%s 後にリマインドします";
                 case "toast_skipped": return "ビルド %s をスキップしました";
                 case "toast_install_obtainium": return "自動更新にはObtainiumをインストールしてください";
@@ -1050,17 +1161,17 @@ public class JhcUpdateCheckPatch {
         // Korean
         else if (lang.equals("ko")) {
             switch (key) {
-                case "title": return emoji(0x1F680) + "  업데이트 가능";
+                case "title": return emoji(0x1F514) + "  업데이트 가능";
                 case "subtitle_fmt": return "빌드 %s";
                 case "patches_fmt": return "패치: %s";
-                case "download_btn": return emoji(0x1F4E5) + "  APK 다운로드";
-                case "obtainium_title": return emoji(0x1F4E6) + "  Obtainium으로 업데이트:";
-                case "obtainium_open": return emoji(0x1F680) + " Obtainium 열기";
-                case "obtainium_import": return emoji(0x1F4F2) + " 프로필 가져오기";
-                case "remind_label": return "\u23F1  나중에 알림:";
+                case "download_btn": return "\u2B07\uFE0F  APK 다운로드";
+                case "obtainium_title": return emoji(0x1F504) + "  Obtainium으로 업데이트:";
+                case "obtainium_open": return emoji(0x1F4F1) + " Obtainium 열기";
+                case "obtainium_import": return "\u2795 프로필 가져오기";
+                case "remind_label": return "\u23F0  나중에 알림:";
                 case "chip_day": return "일";
                 case "chip_1mo": return "1개월";
-                case "skip_btn": return "\u23ED  이 빌드 건너뛰기";
+                case "skip_btn": return "\u2715  이 빌드 건너뛰기";
                 case "toast_snoozed": return "%s 후 다시 알립니다";
                 case "toast_skipped": return "빌드 %s 건너뜀";
                 case "toast_install_obtainium": return "자동 업데이트를 위해 Obtainium을 설치하세요";
@@ -1069,17 +1180,17 @@ public class JhcUpdateCheckPatch {
 
         // English default
         switch (key) {
-            case "title": return emoji(0x1F680) + "  Update Available";
+            case "title": return emoji(0x1F514) + "  Update Available";
             case "subtitle_fmt": return "Build %s";
             case "patches_fmt": return "Patches: %s";
-            case "download_btn": return emoji(0x1F4E5) + "  DOWNLOAD APK";
-            case "obtainium_title": return emoji(0x1F4E6) + "  Update via Obtainium:";
-            case "obtainium_open": return emoji(0x1F680) + " Open Obtainium";
-            case "obtainium_import": return emoji(0x1F4F2) + " Import Profile";
-            case "remind_label": return "\u23F1  Remind me later:";
+            case "download_btn": return "\u2B07\uFE0F  DOWNLOAD APK";
+            case "obtainium_title": return emoji(0x1F504) + "  Update via Obtainium:";
+            case "obtainium_open": return emoji(0x1F4F1) + " Open Obtainium";
+            case "obtainium_import": return "\u2795 Import Profile";
+            case "remind_label": return "\u23F0  Remind me later:";
             case "chip_day": return "d";
             case "chip_1mo": return "1 month";
-            case "skip_btn": return "\u23ED  Skip this build";
+            case "skip_btn": return "\u2715  Skip this build";
             case "toast_snoozed": return "Reminder snoozed for %s";
             case "toast_skipped": return "Build %s skipped";
             case "toast_install_obtainium": return "Install Obtainium for auto-updates";
