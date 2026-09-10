@@ -43,6 +43,7 @@ import android.graphics.RectF;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Icon;
 import android.content.ComponentName;
+import android.content.pm.ShortcutManager;
 import android.os.Bundle;
 import android.preference.Preference;
 import android.preference.PreferenceActivity;
@@ -133,6 +134,7 @@ public class JhcUpdateCheckPatch {
         } catch (Throwable ignored) {}
 
         registerLifecycleIfNeeded(context);
+        cleanupShortcuts(context);
 
         boolean isManual = false;
         if (context instanceof Activity) {
@@ -378,10 +380,36 @@ public class JhcUpdateCheckPatch {
             pref.setPersistent(false);
             pref.setOrder(99999);
 
-            Drawable icon = createSettingsIcon(activity);
-            if (icon != null) {
-                pref.setIcon(icon);
+            int iconRes = 0;
+            String[] candidates = new String[] {
+                "morphe_reload_video_button",
+                "morphe_reload_video_button_bold",
+                "quantum_ic_refresh_white_24",
+                "ic_offline_refresh",
+                "revanced_reload_video_button"
+            };
+            for (String name : candidates) {
+                try {
+                    int id = activity.getResources().getIdentifier(name, "drawable", activity.getPackageName());
+                    if (id != 0) {
+                        iconRes = id;
+                        break;
+                    }
+                } catch (Throwable ignored) {}
             }
+
+            if (iconRes != 0) {
+                pref.setIcon(iconRes);
+            } else {
+                Drawable icon = createSettingsIcon(activity);
+                if (icon != null) {
+                    pref.setIcon(icon);
+                }
+            }
+
+            try {
+                pref.setIconSpaceReserved(true);
+            } catch (Throwable ignored) {}
 
             final Activity actRef = activity;
             pref.setOnPreferenceClickListener(p -> {
@@ -406,6 +434,22 @@ public class JhcUpdateCheckPatch {
         }
     }
 
+    private static void cleanupShortcuts(Context context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N_MR1 && context != null) {
+            try {
+                Context appContext = (context.getApplicationContext() != null) ? context.getApplicationContext() : context;
+                ShortcutManager sm = (ShortcutManager) appContext.getSystemService(Context.SHORTCUT_SERVICE);
+                if (sm != null) {
+                    sm.removeDynamicShortcuts(Collections.singletonList("morphe_check_updates"));
+                    sm.removeAllDynamicShortcuts();
+                    Log.d(TAG, "Removed dynamic shortcuts from system");
+                }
+            } catch (Throwable t) {
+                Log.w(TAG, "Failed to remove dynamic shortcuts", t);
+            }
+        }
+    }
+
     private static Drawable createSettingsIcon(Context context) {
         try {
             float density = context.getResources().getDisplayMetrics().density;
@@ -415,10 +459,10 @@ public class JhcUpdateCheckPatch {
             Bitmap bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
             Canvas canvas = new Canvas(bitmap);
 
-            int color = Color.parseColor("#8E8E93");
+            int color = Color.WHITE;
             try {
                 TypedValue tv = new TypedValue();
-                if (context.getTheme().resolveAttribute(android.R.attr.textColorSecondary, tv, true)) {
+                if (context.getTheme().resolveAttribute(android.R.attr.textColorPrimary, tv, true)) {
                     if (tv.data != 0) color = tv.data;
                 }
             } catch (Throwable ignored) {}
@@ -1658,7 +1702,7 @@ public class JhcUpdateCheckPatch {
                 case "toast_checking_updates": return "Перевірка оновлень патчів...";
                 case "toast_already_latest": return "У вас встановлені найновіші патчі";
                 case "toast_check_failed": return "Не вдалося перевірити оновлення. Перевірте мережу";
-                case "hint_shortcut": return "💡 Перевірити оновлення також можна в Налаштування -> Morphe / RVX";
+                case "hint_shortcut": return "💡 Перевірка: Налаштування -> Morphe/RVX";
             }
         }
         // Russian, Belarusian, Kazakh
@@ -1698,7 +1742,7 @@ public class JhcUpdateCheckPatch {
                 case "toast_checking_updates": return "Проверка обновлений патчей...";
                 case "toast_already_latest": return "У вас установлены актуальные патчи";
                 case "toast_check_failed": return "Не удалось проверить обновления. Проверьте сеть";
-                case "hint_shortcut": return "💡 Проверить обновления также можно в Настройки -> Morphe / RVX";
+                case "hint_shortcut": return "💡 Проверка: Настройки -> Morphe/RVX";
             }
         } 
         // Spanish
@@ -1738,7 +1782,7 @@ public class JhcUpdateCheckPatch {
                 case "toast_checking_updates": return "Buscando actualizaciones de parches...";
                 case "toast_already_latest": return "Tienes instalados los parches más recientes";
                 case "toast_check_failed": return "Error al buscar actualizaciones. Comprueba la red";
-                case "hint_shortcut": return "💡 También puedes buscar actualizaciones en Ajustes -> Morphe / RVX";
+                case "hint_shortcut": return "💡 Ajustes -> Morphe/RVX";
             }
         } 
         // German
@@ -1778,7 +1822,7 @@ public class JhcUpdateCheckPatch {
                 case "toast_checking_updates": return "Suche nach Patch-Updates...";
                 case "toast_already_latest": return "Sie haben die neuesten Patches installiert";
                 case "toast_check_failed": return "Fehler bei der Update-Suche. Netzwerk prüfen";
-                case "hint_shortcut": return "💡 Sie können auch unter Einstellungen -> Morphe / RVX nach Updates suchen";
+                case "hint_shortcut": return "💡 Einstellungen -> Morphe/RVX";
             }
         }
 
@@ -1818,7 +1862,7 @@ public class JhcUpdateCheckPatch {
             case "toast_checking_updates": return "Checking for patch updates...";
             case "toast_already_latest": return "You have the latest patches installed";
             case "toast_check_failed": return "Failed to check for updates. Check your network";
-            case "hint_shortcut": return "💡 You can also check for updates in Settings -> Morphe / RVX";
+            case "hint_shortcut": return "💡 Settings -> Morphe/RVX";
             default: return key;
         }
      }
