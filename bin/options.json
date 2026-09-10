@@ -6,9 +6,6 @@
         "options": {
           "packageName": "app.morphe.android.youtube.test"
         }
-      },
-      "j-hc Update Check": {
-        "enabled": true
       }
     }
   }

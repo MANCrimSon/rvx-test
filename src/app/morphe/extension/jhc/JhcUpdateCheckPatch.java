@@ -109,6 +109,11 @@ public class JhcUpdateCheckPatch {
             return isAnddea ? "YouTube RVX" : "YouTube Morphe";
         }
     }
+    private static String getSettingsBrandName(Context context) {
+        String pkg = (context != null) ? context.getPackageName().toLowerCase(Locale.ROOT) : "";
+        boolean isAnddea = pkg.contains("anddea") || pkg.contains("rvx");
+        return isAnddea ? "RVX" : "Morphe";
+    }
     private static final String OBTAINIUM_DOWNLOAD_URL = "https://github.com/ImranR98/Obtainium/releases/latest";
 
     private static final String ACTION_MANUAL_CHECK = "app.morphe.action.CHECK_UPDATES";
@@ -1393,7 +1398,7 @@ public class JhcUpdateCheckPatch {
 
             // 7. Shortcut Hint Badge
             TextView hintView = new TextView(activity);
-            hintView.setText(getString("hint_shortcut"));
+            hintView.setText(String.format(getString("hint_shortcut_fmt"), getSettingsBrandName(activity)));
             hintView.setTextColor(dark ? Color.parseColor("#C8C8D0") : Color.parseColor("#2E2E36"));
             hintView.setTextSize(11f);
             hintView.setGravity(Gravity.CENTER);
@@ -1702,7 +1707,7 @@ public class JhcUpdateCheckPatch {
                 case "toast_checking_updates": return "Перевірка оновлень патчів...";
                 case "toast_already_latest": return "У вас встановлені найновіші патчі";
                 case "toast_check_failed": return "Не вдалося перевірити оновлення. Перевірте мережу";
-                case "hint_shortcut": return "💡 Перевірка: Налаштування -> Morphe/RVX";
+                case "hint_shortcut_fmt": return "💡 Перевірка: Налаштування -> %s";
             }
         }
         // Russian, Belarusian, Kazakh
@@ -1742,7 +1747,7 @@ public class JhcUpdateCheckPatch {
                 case "toast_checking_updates": return "Проверка обновлений патчей...";
                 case "toast_already_latest": return "У вас установлены актуальные патчи";
                 case "toast_check_failed": return "Не удалось проверить обновления. Проверьте сеть";
-                case "hint_shortcut": return "💡 Проверка: Настройки -> Morphe/RVX";
+                case "hint_shortcut_fmt": return "💡 Проверка: Настройки -> %s";
             }
         } 
         // Spanish
@@ -1782,7 +1787,7 @@ public class JhcUpdateCheckPatch {
                 case "toast_checking_updates": return "Buscando actualizaciones de parches...";
                 case "toast_already_latest": return "Tienes instalados los parches más recientes";
                 case "toast_check_failed": return "Error al buscar actualizaciones. Comprueba la red";
-                case "hint_shortcut": return "💡 Ajustes -> Morphe/RVX";
+                case "hint_shortcut_fmt": return "💡 Ajustes -> %s";
             }
         } 
         // German
@@ -1822,7 +1827,7 @@ public class JhcUpdateCheckPatch {
                 case "toast_checking_updates": return "Suche nach Patch-Updates...";
                 case "toast_already_latest": return "Sie haben die neuesten Patches installiert";
                 case "toast_check_failed": return "Fehler bei der Update-Suche. Netzwerk prüfen";
-                case "hint_shortcut": return "💡 Einstellungen -> Morphe/RVX";
+                case "hint_shortcut_fmt": return "💡 Einstellungen -> %s";
             }
         }
 
@@ -1862,7 +1867,7 @@ public class JhcUpdateCheckPatch {
             case "toast_checking_updates": return "Checking for patch updates...";
             case "toast_already_latest": return "You have the latest patches installed";
             case "toast_check_failed": return "Failed to check for updates. Check your network";
-            case "hint_shortcut": return "💡 Settings -> Morphe/RVX";
+            case "hint_shortcut_fmt": return "💡 Settings -> %s";
             default: return key;
         }
      }
