@@ -632,7 +632,7 @@ public class JhcUpdateCheckPatch {
             scrollWrapper.setFocusableInTouchMode(true);
 
             boolean isInitLandscape = dm.widthPixels > dm.heightPixels;
-            int initMaxH = isInitLandscape ? Math.min(dm.heightPixels - dp(32, density), dp(290, density)) : (int) (dm.heightPixels * 0.9f);
+            int initMaxH = isInitLandscape ? Math.min(dm.heightPixels - dp(32, density), dp(310, density)) : (int) (dm.heightPixels * 0.9f);
             scrollWrapper.setMaxHeight(initMaxH);
 
             FrameLayout.LayoutParams initialWrapLp = new FrameLayout.LayoutParams(
@@ -894,16 +894,44 @@ public class JhcUpdateCheckPatch {
             obtainiumRow.addView(importBtn);
             rightCol.addView(obtainiumRow);
 
-            // 5. Snooze Section
+            // 5. Snooze Section Header with Reset Button
+            LinearLayout snoozeHeader = new LinearLayout(activity);
+            snoozeHeader.setOrientation(LinearLayout.HORIZONTAL);
+            snoozeHeader.setGravity(Gravity.CENTER_VERTICAL);
+            LinearLayout.LayoutParams snoozeHeaderLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            snoozeHeaderLp.topMargin = dp(12, density);
+            snoozeHeader.setLayoutParams(snoozeHeaderLp);
+
             TextView snoozeLabel = new TextView(activity);
             snoozeLabel.setText(getString("snooze_label"));
             snoozeLabel.setTextColor(colSubtitle);
             snoozeLabel.setTextSize(11);
             snoozeLabel.setTypeface(Typeface.DEFAULT_BOLD);
-            LinearLayout.LayoutParams snoozeLblLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            snoozeLblLp.topMargin = dp(12, density);
-            snoozeLabel.setLayoutParams(snoozeLblLp);
-            rightCol.addView(snoozeLabel);
+            snoozeLabel.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.0f));
+            snoozeHeader.addView(snoozeLabel);
+
+            SharedPreferences prefs = activity.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            long curSnooze = prefs.getLong(KEY_SNOOZE_UNTIL, 0L);
+            String curSkip = prefs.getString(KEY_SKIPPED_TAG, "");
+            boolean hasActivePause = (System.currentTimeMillis() < curSnooze) || !curSkip.isEmpty();
+
+            TextView resetBtn = new TextView(activity);
+            resetBtn.setText(getString("btn_reset_snooze"));
+            resetBtn.setTextColor(hasActivePause ? colAccentText : colSubtitle);
+            resetBtn.setTextSize(11);
+            resetBtn.setTypeface(Typeface.DEFAULT_BOLD);
+            resetBtn.setPadding(dp(4, density), 0, dp(4, density), 0);
+            resetBtn.setOnClickListener(v -> {
+                prefs.edit()
+                    .remove(KEY_SNOOZE_UNTIL)
+                    .remove(KEY_SNOOZED_TAG)
+                    .remove(KEY_SKIPPED_TAG)
+                    .apply();
+                dialog.dismiss();
+                showToast(activity, getString("toast_snooze_reset"));
+            });
+            snoozeHeader.addView(resetBtn);
+            rightCol.addView(snoozeHeader);
 
             LinearLayout chipsRow = new LinearLayout(activity);
             chipsRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -911,21 +939,22 @@ public class JhcUpdateCheckPatch {
             scrollLp.topMargin = dp(6, density);
             chipsRow.setLayoutParams(scrollLp);
 
-            int[] days = {1, 3, 7, 14, 30, 90};
+            int[] days = {1, 3, 7, 14, 30, -1};
             for (int i = 0; i < days.length; i++) {
                 int d = days[i];
                 String label;
-                if (d == 30) {
+                if (d == -1) {
+                    label = getString("chip_forever");
+                } else if (d == 30) {
                     label = getString("chip_1mo");
-                } else if (d == 90) {
-                    label = getString("chip_3mo");
                 } else {
                     label = d + " " + getString("chip_day");
                 }
                 TextView chip = createChip(activity, label, colSurface, colSurfaceBorder, colSubtitle, density);
                 chip.setGravity(Gravity.CENTER);
                 chip.setPadding(0, 0, 0, 0);
-                chip.setTextSize(11);
+                chip.setSingleLine(true);
+                chip.setTextSize(d == -1 ? 9.5f : 11f);
 
                 LinearLayout.LayoutParams chipLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1.0f);
                 if (i > 0) {
@@ -936,7 +965,11 @@ public class JhcUpdateCheckPatch {
                 chip.setOnClickListener(v -> {
                     snooze(activity, tag, d);
                     dialog.dismiss();
-                    showToast(activity, String.format(getString("toast_snoozed"), label));
+                    if (d == -1) {
+                        showToast(activity, getString("toast_snoozed_forever"));
+                    } else {
+                        showToast(activity, String.format(getString("toast_snoozed"), label));
+                    }
                 });
                 chipsRow.addView(chip);
             }
@@ -953,21 +986,28 @@ public class JhcUpdateCheckPatch {
             skipBtn.setLayoutParams(skipLp);
             skipBtn.setPadding(0, dp(4, density), 0, dp(4, density));
             skipBtn.setOnClickListener(v -> {
-                SharedPreferences prefs = activity.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
                 prefs.edit().putString(KEY_SKIPPED_TAG, tag).apply();
                 dialog.dismiss();
                 showToast(activity, String.format(getString("toast_skipped"), tag));
             });
             rightCol.addView(skipBtn);
 
-            // 7. Shortcut Hint
+            // 7. Shortcut Hint Badge
             TextView hintView = new TextView(activity);
             hintView.setText(getString("hint_shortcut"));
-            hintView.setTextColor(colSubtitle);
-            hintView.setTextSize(10.5f);
+            hintView.setTextColor(dark ? Color.parseColor("#C8C8D0") : Color.parseColor("#2E2E36"));
+            hintView.setTextSize(11f);
             hintView.setGravity(Gravity.CENTER);
+
+            GradientDrawable hintBg = new GradientDrawable();
+            hintBg.setColor(colSurface);
+            hintBg.setCornerRadius(dp(12, density));
+            hintBg.setStroke(1, colSurfaceBorder);
+            hintView.setBackground(hintBg);
+            hintView.setPadding(dp(10, density), dp(6, density), dp(10, density), dp(6, density));
+
             LinearLayout.LayoutParams hintLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            hintLp.topMargin = dp(6, density);
+            hintLp.topMargin = dp(8, density);
             hintView.setLayoutParams(hintLp);
             rightCol.addView(hintView);
 
@@ -1016,7 +1056,7 @@ public class JhcUpdateCheckPatch {
 
                 if (isLandscape) {
                     int cardWidth = Math.min(totalWidth - dp(32, density), dp(660, density));
-                    int maxCardHeight = Math.min(totalHeight - dp(32, density), dp(290, density));
+                    int maxCardHeight = Math.min(totalHeight - dp(32, density), dp(310, density));
                     scrollWrapper.setMaxHeight(maxCardHeight);
 
                     FrameLayout.LayoutParams wrapLp = new FrameLayout.LayoutParams(
@@ -1044,7 +1084,7 @@ public class JhcUpdateCheckPatch {
                     dlLp.topMargin = dp(8, density);
                     obLblLp.topMargin = 0;
                     obRowLp.topMargin = dp(4, density);
-                    snoozeLblLp.topMargin = dp(8, density);
+                    snoozeHeaderLp.topMargin = dp(8, density);
                     scrollLp.topMargin = dp(4, density);
                     skipLp.topMargin = dp(8, density);
                     hintLp.topMargin = dp(4, density);
@@ -1079,7 +1119,7 @@ public class JhcUpdateCheckPatch {
                     dlLp.topMargin = dp(12, density);
                     obLblLp.topMargin = dp(12, density);
                     obRowLp.topMargin = dp(6, density);
-                    snoozeLblLp.topMargin = dp(12, density);
+                    snoozeHeaderLp.topMargin = dp(12, density);
                     scrollLp.topMargin = dp(6, density);
                     skipLp.topMargin = dp(10, density);
                     hintLp.topMargin = dp(6, density);
@@ -1117,7 +1157,7 @@ public class JhcUpdateCheckPatch {
     }
 
     private static void snooze(Context context, String tag, int days) {
-        long snoozeTime = System.currentTimeMillis() + (days * 86_400_000L);
+        long snoozeTime = (days == -1) ? Long.MAX_VALUE : (System.currentTimeMillis() + (days * 86_400_000L));
         SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         prefs.edit()
             .putLong(KEY_SNOOZE_UNTIL, snoozeTime)
@@ -1241,9 +1281,12 @@ public class JhcUpdateCheckPatch {
                 case "snooze_label": return "🔕  ВИМКНУТИ СПОВІЩЕННЯ НА:";
                 case "chip_day": return "дн";
                 case "chip_1mo": return "1 міс";
-                case "chip_3mo": return "3 міс";
+                case "chip_forever": return "Назавжди";
+                case "btn_reset_snooze": return "↺  Скинути";
                 case "skip_btn": return "Пропустити цю версію";
                 case "toast_snoozed": return "Сповіщення вимкнено на %s";
+                case "toast_snoozed_forever": return "Сповіщення вимкнено назавжди";
+                case "toast_snooze_reset": return "Паузу скинуто. Сповіщення увімкнено";
                 case "hint_shortcut": return "💡 Затисніть іконку на робочому столі для ручної перевірки";
                 case "toast_skipped": return "Збірку %s пропущено";
                 case "toast_install_obtainium": return "Встановіть Obtainium для автооновлень";
@@ -1268,9 +1311,12 @@ public class JhcUpdateCheckPatch {
                 case "snooze_label": return "🔕  ОТКЛЮЧИТЬ УВЕДОМЛЕНИЯ НА:";
                 case "chip_day": return "дн";
                 case "chip_1mo": return "1 мес";
-                case "chip_3mo": return "3 мес";
+                case "chip_forever": return "Навсегда";
+                case "btn_reset_snooze": return "↺  Сбросить";
                 case "skip_btn": return "Пропустить эту версию";
                 case "toast_snoozed": return "Уведомления отключены на %s";
+                case "toast_snoozed_forever": return "Уведомления отключены навсегда";
+                case "toast_snooze_reset": return "Пауза сброшена. Уведомления включены";
                 case "hint_shortcut": return "💡 Зажмите иконку на рабочем столе для ручной проверки";
                 case "toast_skipped": return "Билд %s пропущен";
                 case "toast_install_obtainium": return "Установите Obtainium для автообновлений";
@@ -1295,9 +1341,12 @@ public class JhcUpdateCheckPatch {
                 case "snooze_label": return "🔕  PAUSAR NOTIFICACIONES:";
                 case "chip_day": return "d";
                 case "chip_1mo": return "1 mes";
-                case "chip_3mo": return "3 meses";
+                case "chip_forever": return "Siempre";
+                case "btn_reset_snooze": return "↺  Restablecer";
                 case "skip_btn": return "Omitir esta versión";
                 case "toast_snoozed": return "Notificaciones pausadas por %s";
+                case "toast_snoozed_forever": return "Notificaciones desactivadas permanentemente";
+                case "toast_snooze_reset": return "Pausa restablecida. Notificaciones activadas";
                 case "hint_shortcut": return "💡 Mantén pulsado el icono para buscar actualizaciones";
                 case "toast_skipped": return "Versión %s omitida";
                 case "toast_install_obtainium": return "Instala Obtainium para actualizaciones";
@@ -1322,9 +1371,12 @@ public class JhcUpdateCheckPatch {
                 case "snooze_label": return "🔕  BENACHRICHTIGUNGEN PAUSIEREN:";
                 case "chip_day": return "T";
                 case "chip_1mo": return "1 Monat";
-                case "chip_3mo": return "3 Monate";
+                case "chip_forever": return "Immer";
+                case "btn_reset_snooze": return "↺  Zurücksetzen";
                 case "skip_btn": return "Diese Version überspringen";
                 case "toast_snoozed": return "Benachrichtigungen pausiert für %s";
+                case "toast_snoozed_forever": return "Benachrichtigungen dauerhaft deaktiviert";
+                case "toast_snooze_reset": return "Pause zurückgesetzt. Benachrichtigungen aktiviert";
                 case "hint_shortcut": return "💡 Halte das App-Symbol gedrückt für manuelle Suche";
                 case "toast_skipped": return "Build %s übersprungen";
                 case "toast_install_obtainium": return "Installiere Obtainium für Updates";
@@ -1349,9 +1401,12 @@ public class JhcUpdateCheckPatch {
             case "snooze_label": return "🔕  PAUSE NOTIFICATIONS FOR:";
             case "chip_day": return "d";
             case "chip_1mo": return "1 mo";
-            case "chip_3mo": return "3 mo";
+            case "chip_forever": return "Forever";
+            case "btn_reset_snooze": return "↺  Reset";
             case "skip_btn": return "Skip this version";
             case "toast_snoozed": return "Notifications paused for %s";
+            case "toast_snoozed_forever": return "Notifications disabled permanently";
+            case "toast_snooze_reset": return "Pause reset. Notifications enabled";
             case "toast_skipped": return "Build %s skipped";
             case "toast_install_obtainium": return "Install Obtainium for auto-updates";
             case "shortcut_label": return "Update Patches";
