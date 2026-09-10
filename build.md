@@ -4,5 +4,5 @@ Install instructions: [NonRoot + Obtainium](https://github.com/MANCrimSon/YouTub
   
 CLI: MorpheApp/morphe-desktop/morphe-desktop-1.15.1-all.jar  
   
-Patches: sashade8-ship-it/dual-vot-patches/patches-1.42.0-dualvot.8.4.mpp  
-[Changelog](https://github.com/sashade8-ship-it/dual-vot-patches/releases/tag/v1.42.0-dualvot.8.4)  
+Patches: sashade8-ship-it/dual-vot-patches/patches-1.42.0-dualvot.8.5.1.mpp  
+[Changelog](https://github.com/sashade8-ship-it/dual-vot-patches/releases/tag/v1.42.0-dualvot.8.5.1)  
