@@ -153,7 +153,7 @@ public class JhcUpdateCheckPatch {
                 patchVersion = patchVer;
 
                 // Extract changelog link: prefer upstream patch changelog if present, fallback to GitHub release page
-                String extractedChangelog = extractChangelogUrl(body);
+                String extractedChangelog = extractChangelogUrl(body, patchVer);
                 if (extractedChangelog != null && !extractedChangelog.isEmpty()) {
                     changelogUrl = extractedChangelog;
                 } else {
@@ -207,15 +207,38 @@ public class JhcUpdateCheckPatch {
         }
     }
 
-    private static String extractChangelogUrl(String body) {
-        if (body == null || body.isEmpty()) return null;
+    private static String extractChangelogUrl(String body, String patchVersion) {
+        if (body == null) body = "";
+
+        // 1. If MorpheApp/morphe-patches changelog link exists in the release body, prefer it
         try {
-            Pattern p = Pattern.compile("https://github\\.com/[^\\s)\"]+/releases/tag/[^\\s)\"]+");
-            Matcher m = p.matcher(body);
-            if (m.find()) {
-                return m.group(0);
+            Pattern pMorphe = Pattern.compile("https://github\\.com/MorpheApp/morphe-patches/releases/tag/[^\\s)\"]+");
+            Matcher mMorphe = pMorphe.matcher(body);
+            if (mMorphe.find()) {
+                return mMorphe.group(0);
             }
         } catch (Exception ignored) {}
+
+        // 2. If patches are dual-vot, link directly to Morphe upstream changelog
+        String verToCheck = (patchVersion != null && !patchVersion.isEmpty()) ? patchVersion : body;
+        if (verToCheck.toLowerCase(Locale.ROOT).contains("dualvot") || body.contains("dual-vot-patches")) {
+            String baseVer = patchVersion != null ? patchVersion : "";
+            baseVer = baseVer.replaceAll("-dualvot\\.[0-9a-zA-Z._-]+", "")
+                             .replaceAll("^[vV]", "");
+            if (!baseVer.isEmpty()) {
+                return "https://github.com/MorpheApp/morphe-patches/releases/tag/v" + baseVer;
+            }
+        }
+
+        // 3. Fallback to any patch changelog link in body
+        try {
+            Pattern pAny = Pattern.compile("https://github\\.com/[^\\s)\"]+/releases/tag/[^\\s)\"]+");
+            Matcher mAny = pAny.matcher(body);
+            if (mAny.find()) {
+                return mAny.group(0);
+            }
+        } catch (Exception ignored) {}
+
         return null;
     }
 
