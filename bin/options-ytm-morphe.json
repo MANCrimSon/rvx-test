@@ -1,0 +1,12 @@
+[
+  {
+    "patches": {
+      "Clone app": {
+        "enabled": true,
+        "options": {
+          "packageName": "app.morphe.android.apps.youtube.music.test"
+        }
+      }
+    }
+  }
+]

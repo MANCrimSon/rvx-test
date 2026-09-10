@@ -1,0 +1,11 @@
+[
+  {
+    "patches": {
+      "GmsCore support": {
+        "options": {
+          "packageNameYouTubeMusic": "anddea.youtube.music.test"
+        }
+      }
+    }
+  }
+]
