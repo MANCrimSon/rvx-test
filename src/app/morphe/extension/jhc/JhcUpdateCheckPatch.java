@@ -32,6 +32,10 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.content.pm.ShortcutInfo;
+import android.content.pm.ShortcutManager;
+import android.graphics.drawable.Icon;
+import java.util.Collections;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -63,8 +67,10 @@ public class JhcUpdateCheckPatch {
         "obtainium://app/%7B%22id%22%3A%22app.morphe.android.youtube.test%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FMANCrimSon%2Frvx-test%22%2C%22author%22%3A%22MANCrimSon%22%2C%22name%22%3A%22YouTube%20Morphe%20%28Test%29%22%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Atrue%2C%5C%22fallbackToOlderReleases%5C%22%3Atrue%2C%5C%22versionDetection%5C%22%3Afalse%2C%5C%22apkFilterRegEx%5C%22%3A%5C%22%5Eyoutube-morphe%5C%22%2C%5C%22autoApkFilterByArch%5C%22%3Afalse%7D%22%7D";
     private static final String OBTAINIUM_DOWNLOAD_URL = "https://github.com/ImranR98/Obtainium/releases/latest";
 
-    // 3.5 seconds delay on startup
-    private static final long STARTUP_DELAY_MS = 3500L;
+    private static final String ACTION_MANUAL_CHECK = "app.morphe.action.CHECK_UPDATES";
+
+    // 10 seconds delay on normal startup
+    private static final long STARTUP_DELAY_MS = 10000L;
     // 0 during testing
     private static final long API_COOLDOWN_MS = 0L;
     // 0 for test builds
@@ -75,6 +81,24 @@ public class JhcUpdateCheckPatch {
     public static void checkUpdate(Context context) {
         if (context == null) return;
 
+        registerShortcut(context);
+
+        boolean isManual = false;
+        if (context instanceof Activity) {
+            Intent intent = ((Activity) context).getIntent();
+            if (intent != null && ACTION_MANUAL_CHECK.equals(intent.getAction())) {
+                isManual = true;
+                intent.setAction(Intent.ACTION_MAIN);
+            }
+        }
+
+        final boolean manualCheck = isManual;
+        long delay = manualCheck ? 300L : STARTUP_DELAY_MS;
+
+        if (manualCheck && context instanceof Activity) {
+            showToast(context, getString("toast_checking_updates"));
+        }
+
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
             try {
                 Context appContext = context.getApplicationContext();
@@ -82,19 +106,48 @@ public class JhcUpdateCheckPatch {
 
                 long now = System.currentTimeMillis();
                 long lastCheck = prefs.getLong(KEY_LAST_CHECK_TIME, 0L);
-                if (!FORCE_TEST_ALWAYS_SHOW && API_COOLDOWN_MS > 0 && (now - lastCheck < API_COOLDOWN_MS)) {
+                if (!manualCheck && !FORCE_TEST_ALWAYS_SHOW && API_COOLDOWN_MS > 0 && (now - lastCheck < API_COOLDOWN_MS)) {
                     Log.d(TAG, "Cooldown active, skipping check");
                     return;
                 }
 
-                new Thread(() -> performCheck(context)).start();
+                new Thread(() -> performCheck(context, manualCheck)).start();
             } catch (Throwable t) {
                 Log.e(TAG, "Error in checkUpdate scheduler", t);
             }
-        }, STARTUP_DELAY_MS);
+        }, delay);
     }
 
-    private static void performCheck(Context context) {
+    private static void registerShortcut(Context context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N_MR1) {
+            try {
+                ShortcutManager sm = (ShortcutManager) context.getSystemService(Context.SHORTCUT_SERVICE);
+                if (sm != null) {
+                    Intent shortcutIntent = new Intent(context, context.getClass());
+                    shortcutIntent.setAction(ACTION_MANUAL_CHECK);
+                    shortcutIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+
+                    ShortcutInfo.Builder builder = new ShortcutInfo.Builder(context, "morphe_check_updates")
+                        .setShortLabel(getString("shortcut_label"))
+                        .setLongLabel(getString("shortcut_long_label"))
+                        .setIntent(shortcutIntent);
+
+                    try {
+                        int iconRes = context.getApplicationInfo().icon;
+                        if (iconRes != 0) {
+                            builder.setIcon(Icon.createWithResource(context, iconRes));
+                        }
+                    } catch (Throwable ignored) {}
+
+                    sm.setDynamicShortcuts(Collections.singletonList(builder.build()));
+                }
+            } catch (Throwable t) {
+                Log.e(TAG, "Failed to register shortcut", t);
+            }
+        }
+    }
+
+    private static void performCheck(Context context, boolean manualCheck) {
         try {
             Context appContext = context.getApplicationContext();
             SharedPreferences prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
@@ -164,11 +217,15 @@ public class JhcUpdateCheckPatch {
 
             if (targetTag == null || downloadUrl == null) {
                 Log.d(TAG, "No matching APK found in releases");
+                if (manualCheck && context instanceof Activity) {
+                    ((Activity) context).runOnUiThread(() -> 
+                        showToast(context, getString("toast_already_latest")));
+                }
                 return;
             }
 
-            // If not in forced test mode, check snooze and skip
-            if (!FORCE_TEST_ALWAYS_SHOW) {
+            // If not in forced test mode and not a manual check, check snooze and skip
+            if (!FORCE_TEST_ALWAYS_SHOW && !manualCheck) {
                 String skippedTag = prefs.getString(KEY_SKIPPED_TAG, "");
                 if (targetTag.equals(skippedTag)) {
                     Log.d(TAG, "Build " + targetTag + " was skipped by user");
@@ -189,6 +246,15 @@ public class JhcUpdateCheckPatch {
                         Log.d(TAG, "App is up to date (remote: " + remoteBuildCode + ", installed: " + EMBEDDED_BUILD_CODE + ")");
                         return;
                     }
+                }
+            } else if (manualCheck && EMBEDDED_BUILD_CODE > 0 && !FORCE_TEST_ALWAYS_SHOW) {
+                int remoteBuildCode = parseNumericTag(targetTag);
+                if (remoteBuildCode > 0 && remoteBuildCode <= EMBEDDED_BUILD_CODE) {
+                    if (context instanceof Activity) {
+                        ((Activity) context).runOnUiThread(() -> 
+                            showToast(context, getString("toast_already_latest")));
+                    }
+                    return;
                 }
             }
 
@@ -995,6 +1061,10 @@ public class JhcUpdateCheckPatch {
                 case "toast_snoozed": return "Нагадування відкладено на %s";
                 case "toast_skipped": return "Збірку %s пропущено";
                 case "toast_install_obtainium": return "Встановіть Obtainium для автооновлень";
+                case "shortcut_label": return "Оновлення";
+                case "shortcut_long_label": return "🚀  Перевірити оновлення";
+                case "toast_checking_updates": return "Перевірка оновлень...";
+                case "toast_already_latest": return "У вас встановлена остання версія";
             }
         }
         // Russian, Belarusian, Kazakh
@@ -1017,6 +1087,10 @@ public class JhcUpdateCheckPatch {
                 case "toast_snoozed": return "Напоминание отложено на %s";
                 case "toast_skipped": return "Билд %s пропущен";
                 case "toast_install_obtainium": return "Установите Obtainium для автообновлений";
+                case "shortcut_label": return "Обновления";
+                case "shortcut_long_label": return "🚀  Проверить обновления";
+                case "toast_checking_updates": return "Проверка обновлений...";
+                case "toast_already_latest": return "У вас установлена последняя версия";
             }
         } 
         // Spanish
@@ -1039,6 +1113,10 @@ public class JhcUpdateCheckPatch {
                 case "toast_snoozed": return "Recordatorio pospuesto por %s";
                 case "toast_skipped": return "Versión %s omitida";
                 case "toast_install_obtainium": return "Instala Obtainium para actualizaciones";
+                case "shortcut_label": return "Actualizaciones";
+                case "shortcut_long_label": return "🚀  Buscar actualizaciones";
+                case "toast_checking_updates": return "Buscando actualizaciones...";
+                case "toast_already_latest": return "Ya tienes la última versión instalada";
             }
         } 
         // German
@@ -1061,6 +1139,10 @@ public class JhcUpdateCheckPatch {
                 case "toast_snoozed": return "Erinnerung verschoben um %s";
                 case "toast_skipped": return "Build %s übersprungen";
                 case "toast_install_obtainium": return "Installiere Obtainium für Updates";
+                case "shortcut_label": return "Updates";
+                case "shortcut_long_label": return "🚀  Nach Updates suchen";
+                case "toast_checking_updates": return "Suche nach Updates...";
+                case "toast_already_latest": return "Sie haben die neueste Version installiert";
             }
         }
 
