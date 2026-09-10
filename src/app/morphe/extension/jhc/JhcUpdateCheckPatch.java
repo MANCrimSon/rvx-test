@@ -431,7 +431,10 @@ public class JhcUpdateCheckPatch {
             sheet.setBackground(sheetBg);
 
             // ScrollWrapper
-            ScrollView scrollWrapper = new ScrollView(activity);
+            MaxHeightScrollView scrollWrapper = new MaxHeightScrollView(activity);
+            boolean isInitLandscape = dm.widthPixels > dm.heightPixels;
+            int initMaxH = isInitLandscape ? (dm.heightPixels - dp(24, density)) : (int) (dm.heightPixels * 0.9f);
+            scrollWrapper.setMaxHeight(initMaxH);
             scrollWrapper.setVerticalScrollBarEnabled(false);
 
             // Drag to dismiss touch listener
@@ -705,9 +708,16 @@ public class JhcUpdateCheckPatch {
             LinearLayout chipsRow = new LinearLayout(activity);
             chipsRow.setOrientation(LinearLayout.HORIZONTAL);
 
-            int[] days = {1, 3, 7, 14, 30};
+            int[] days = {1, 3, 7, 14, 30, 90};
             for (int d : days) {
-                String label = d == 30 ? getString("chip_1mo") : d + " " + getString("chip_day");
+                String label;
+                if (d == 30) {
+                    label = getString("chip_1mo");
+                } else if (d == 90) {
+                    label = getString("chip_3mo");
+                } else {
+                    label = d + " " + getString("chip_day");
+                }
                 TextView chip = createChip(activity, label, colSurface, colSurfaceBorder, colSubtitle, density);
                 chip.setOnClickListener(v -> {
                     snooze(activity, tag, d);
@@ -751,17 +761,23 @@ public class JhcUpdateCheckPatch {
 
                 if (isLandscape) {
                     int cardWidth = Math.min(totalWidth - dp(32, density), dp(480, density));
+                    int maxCardHeight = totalHeight - dp(24, density);
+                    scrollWrapper.setMaxHeight(maxCardHeight);
+
                     FrameLayout.LayoutParams wrapLp = new FrameLayout.LayoutParams(
                         cardWidth,
                         ViewGroup.LayoutParams.WRAP_CONTENT,
                         Gravity.CENTER
                     );
+                    wrapLp.topMargin = dp(12, density);
+                    wrapLp.bottomMargin = dp(12, density);
                     scrollWrapper.setLayoutParams(wrapLp);
 
+                    handle.setVisibility(View.GONE);
                     sheetBg.setCornerRadius(dp(20, density));
                     sheet.setPadding(dp(20, density), dp(8, density), dp(20, density), dp(10, density));
-                    handleLp.bottomMargin = dp(4, density);
-                    idRowLp.topMargin = dp(6, density);
+                    handleLp.bottomMargin = 0;
+                    idRowLp.topMargin = 0;
                     infoCardLp.topMargin = dp(8, density);
                     dlLp.topMargin = dp(8, density);
                     obLblLp.topMargin = dp(8, density);
@@ -770,6 +786,9 @@ public class JhcUpdateCheckPatch {
                     scrollLp.topMargin = dp(4, density);
                     skipLp.topMargin = dp(6, density);
                 } else {
+                    int maxCardHeight = (int) (totalHeight * 0.9f);
+                    scrollWrapper.setMaxHeight(maxCardHeight);
+
                     FrameLayout.LayoutParams wrapLp = new FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -777,6 +796,7 @@ public class JhcUpdateCheckPatch {
                     );
                     scrollWrapper.setLayoutParams(wrapLp);
 
+                    handle.setVisibility(View.VISIBLE);
                     float r = dp(24, density);
                     sheetBg.setCornerRadii(new float[]{r, r, r, r, 0, 0, 0, 0});
                     sheet.setPadding(dp(20, density), dp(10, density), dp(20, density), dp(24, density));
@@ -947,6 +967,7 @@ public class JhcUpdateCheckPatch {
                 case "snooze_label": return "⏰  НАГАДАТИ ПІЗНІШЕ:";
                 case "chip_day": return "дн";
                 case "chip_1mo": return "1 міс";
+                case "chip_3mo": return "3 міс";
                 case "skip_btn": return "Пропустити цю версію";
                 case "toast_snoozed": return "Нагадування відкладено на %s";
                 case "toast_skipped": return "Збірку %s пропущено";
@@ -968,6 +989,7 @@ public class JhcUpdateCheckPatch {
                 case "snooze_label": return "⏰  НАПОМНИТЬ ПОЗЖЕ:";
                 case "chip_day": return "дн";
                 case "chip_1mo": return "1 мес";
+                case "chip_3mo": return "3 мес";
                 case "skip_btn": return "Пропустить эту версию";
                 case "toast_snoozed": return "Напоминание отложено на %s";
                 case "toast_skipped": return "Билд %s пропущен";
@@ -989,6 +1011,7 @@ public class JhcUpdateCheckPatch {
                 case "snooze_label": return "⏰  RECORDAR MÁS TARDE:";
                 case "chip_day": return "d";
                 case "chip_1mo": return "1 mes";
+                case "chip_3mo": return "3 meses";
                 case "skip_btn": return "Omitir esta versión";
                 case "toast_snoozed": return "Recordatorio pospuesto por %s";
                 case "toast_skipped": return "Versión %s omitida";
@@ -1010,6 +1033,7 @@ public class JhcUpdateCheckPatch {
                 case "snooze_label": return "⏰  SPÄTER ERINNERN:";
                 case "chip_day": return "T";
                 case "chip_1mo": return "1 Monat";
+                case "chip_3mo": return "3 Monate";
                 case "skip_btn": return "Diese Version überspringen";
                 case "toast_snoozed": return "Erinnerung verschoben um %s";
                 case "toast_skipped": return "Build %s übersprungen";
@@ -1031,11 +1055,36 @@ public class JhcUpdateCheckPatch {
             case "snooze_label": return "⏰  REMIND ME LATER:";
             case "chip_day": return "d";
             case "chip_1mo": return "1 mo";
+            case "chip_3mo": return "3 mo";
             case "skip_btn": return "Skip this version";
             case "toast_snoozed": return "Reminder snoozed for %s";
             case "toast_skipped": return "Build %s skipped";
             case "toast_install_obtainium": return "Install Obtainium for auto-updates";
             default: return key;
+        }
+     }
+
+    private static class MaxHeightScrollView extends ScrollView {
+        private int maxHeight = -1;
+
+        public MaxHeightScrollView(Context context) {
+            super(context);
+        }
+
+        public void setMaxHeight(int max) {
+            this.maxHeight = max;
+            requestLayout();
+        }
+
+        @Override
+        protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            if (maxHeight > 0) {
+                int size = MeasureSpec.getSize(heightMeasureSpec);
+                int mode = MeasureSpec.getMode(heightMeasureSpec);
+                int target = (mode == MeasureSpec.UNSPECIFIED) ? maxHeight : Math.min(size, maxHeight);
+                heightMeasureSpec = MeasureSpec.makeMeasureSpec(target, MeasureSpec.AT_MOST);
+            }
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec);
         }
     }
 }
