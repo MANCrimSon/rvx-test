@@ -53,7 +53,6 @@ public class JhcUpdateCheckPatch {
     private static final String KEY_SKIPPED_TAG = "skipped_tag";
     private static final String KEY_LAST_CHECK_TIME = "last_check_time";
     private static final String KEY_LAST_REMOTE_TAG = "last_remote_tag";
-    private static final String KEY_NOTIFY_DEV = "notify_dev_builds";
 
     // Target repository
     private static final String REPO_OWNER_NAME = "MANCrimSon/rvx-test";
@@ -128,13 +127,11 @@ public class JhcUpdateCheckPatch {
             JSONArray releases = new JSONArray(sb.toString());
             if (releases.length() == 0) return;
 
-            boolean notifyDev = prefs.getBoolean(KEY_NOTIFY_DEV, true);
-
             String targetTag = null;
             String downloadUrl = null;
             String appVersion = "";
             String patchVersion = "";
-            boolean targetIsDev = false;
+            String changelogUrl = null;
 
             for (int i = 0; i < releases.length(); i++) {
                 JSONObject rel = releases.getJSONObject(i);
@@ -149,19 +146,19 @@ public class JhcUpdateCheckPatch {
 
                 String body = rel.optString("body", "");
                 String patchVer = extractPatchVersion(body);
-                boolean isDev = isDevPatch(patchVer, rel.optBoolean("prerelease", false));
-
-                // If user only wants stable releases, skip dev builds
-                if (!notifyDev && isDev) {
-                    Log.d(TAG, "Skipping dev build " + tag + " (patch: " + patchVer + ")");
-                    continue;
-                }
 
                 targetTag = tag;
                 downloadUrl = matchedUrl;
                 appVersion = extractVersionFromUrl(matchedUrl);
                 patchVersion = patchVer;
-                targetIsDev = isDev;
+
+                // Extract changelog link: prefer upstream patch changelog if present, fallback to GitHub release page
+                String extractedChangelog = extractChangelogUrl(body);
+                if (extractedChangelog != null && !extractedChangelog.isEmpty()) {
+                    changelogUrl = extractedChangelog;
+                } else {
+                    changelogUrl = rel.optString("html_url", "https://github.com/" + REPO_OWNER_NAME + "/releases/tag/" + tag);
+                }
                 break;
             }
 
@@ -199,24 +196,27 @@ public class JhcUpdateCheckPatch {
             final String finalUrl = downloadUrl;
             final String finalVer = appVersion;
             final String finalPatchVer = patchVersion;
-            final boolean finalIsDev = targetIsDev;
+            final String finalChangelog = changelogUrl;
 
             if (context instanceof Activity) {
                 ((Activity) context).runOnUiThread(() -> 
-                    showDialog((Activity) context, finalTag, finalVer, finalPatchVer, finalUrl, finalIsDev));
+                    showDialog((Activity) context, finalTag, finalVer, finalPatchVer, finalUrl, finalChangelog));
             }
         } catch (Throwable t) {
             Log.e(TAG, "Error checking updates", t);
         }
     }
 
-    private static boolean isDevPatch(String patchVer, boolean isPrerelease) {
-        if (isPrerelease) return true;
-        if (patchVer != null && !patchVer.isEmpty()) {
-            String lower = patchVer.toLowerCase(Locale.ROOT);
-            return lower.contains("dev") || lower.contains("beta") || lower.contains("alpha") || lower.contains("rc");
-        }
-        return false;
+    private static String extractChangelogUrl(String body) {
+        if (body == null || body.isEmpty()) return null;
+        try {
+            Pattern p = Pattern.compile("https://github\\.com/[^\\s)\"]+/releases/tag/[^\\s)\"]+");
+            Matcher m = p.matcher(body);
+            if (m.find()) {
+                return m.group(0);
+            }
+        } catch (Exception ignored) {}
+        return null;
     }
 
     private static String findMatchingAsset(JSONArray assets) {
@@ -372,8 +372,8 @@ public class JhcUpdateCheckPatch {
         return lum < 0.5;
     }
 
-    // --- UI DIALOG (Modern Beautiful Minimalism & Interactive DEV Toggle) ---
-    private static void showDialog(Activity activity, String tag, String version, String patchVersion, String downloadUrl, boolean isDev) {
+    // --- UI DIALOG (Style 1: Material 3 / Telegram Layout with Changelog & Return Labels) ---
+    private static void showDialog(Activity activity, String tag, String version, String patchVersion, String downloadUrl, String changelogUrl) {
         if (activity == null || activity.isFinishing() || activity.isDestroyed()) {
             return;
         }
@@ -386,8 +386,8 @@ public class JhcUpdateCheckPatch {
             float density = dm.density;
             boolean dark = isDarkTheme(activity);
 
-            // Palette Definition (Minimalist subtle tones)
-            int darkCardBg = Color.parseColor("#141416");
+            // Palette Definition (Material 3 / YouTube Clean)
+            int darkCardBg = Color.parseColor("#121214");
             try {
                 Class<?> themeUtilsClass = Class.forName("app.morphe.extension.shared.theme.ThemeUtils");
                 Method getBgMethod = themeUtilsClass.getMethod("getDialogBackgroundColor");
@@ -396,17 +396,24 @@ public class JhcUpdateCheckPatch {
             } catch (Throwable ignored) {}
 
             final int colCardBg = dark ? darkCardBg : Color.parseColor("#FFFFFF");
+            final int colCardBorder = dark ? Color.parseColor("#242428") : Color.parseColor("#E8E8EE");
             final int colBackdrop = dark ? Color.parseColor("#90000000") : Color.parseColor("#50000000");
-            final int colTitle = dark ? Color.WHITE : Color.parseColor("#0F0F0F");
-            final int colSubtitle = dark ? Color.parseColor("#8E8E93") : Color.parseColor("#606060");
-            final int colHandle = dark ? Color.parseColor("#38383A") : Color.parseColor("#D1D1D6");
-            final int colSurface = dark ? Color.parseColor("#1C1C1E") : Color.parseColor("#F2F2F7");
-            final int colSurfaceBorder = dark ? Color.parseColor("#2C2C2E") : Color.parseColor("#E5E5EA");
+            final int colTitle = dark ? Color.WHITE : Color.parseColor("#0F0F12");
+            final int colSubtitle = dark ? Color.parseColor("#9E9EA6") : Color.parseColor("#62626C");
+            final int colHandle = dark ? Color.parseColor("#38383E") : Color.parseColor("#D4D4DC");
+            
+            // Container Surface
+            final int colSurface = dark ? Color.parseColor("#1A1A1E") : Color.parseColor("#F6F6FA");
+            final int colSurfaceBorder = dark ? Color.parseColor("#28282E") : Color.parseColor("#E6E6EE");
+            final int colButtonSurface = dark ? Color.parseColor("#1E1E22") : Color.parseColor("#F4F4F8");
+            final int colButtonBorder = dark ? Color.parseColor("#2E2E34") : Color.parseColor("#E4E4EC");
+            final int colButtonText = dark ? Color.parseColor("#F0F0F4") : Color.parseColor("#121216");
+            
+            // Accents
             final int colPrimaryBtnBg = dark ? Color.parseColor("#3EA6FF") : Color.parseColor("#065FD4");
             final int colPrimaryBtnText = dark ? Color.BLACK : Color.WHITE;
-            final int colPillText = dark ? Color.parseColor("#F2F2F7") : Color.parseColor("#0F0F0F");
-            final int colSwitchActive = dark ? Color.parseColor("#3EA6FF") : Color.parseColor("#065FD4");
-            final int colSwitchInactive = dark ? Color.parseColor("#3A3A3C") : Color.parseColor("#D1D1D6");
+            final int colAccentText = dark ? Color.parseColor("#3EA6FF") : Color.parseColor("#065FD4");
+            final int colIconBg = dark ? Color.parseColor("#1C2430") : Color.parseColor("#EBF3FF");
 
             // Fullscreen backdrop container
             FrameLayout rootFrame = new FrameLayout(activity);
@@ -491,151 +498,138 @@ public class JhcUpdateCheckPatch {
             handle.setBackground(handleBg);
             headerLayout.addView(handle);
 
-            // 1. Status Pill Badge (e.g. [ ⚡ DEV • Patches 1.42.0-dev.10 ] or [ ✨ Release • Patches 1.42.0 ])
-            TextView badgeView = new TextView(activity);
-            String badgePrefix = isDev ? getString("badge_dev") : getString("badge_release");
-            String patchStr = patchVersion.isEmpty() ? "" : " • " + patchVersion;
-            badgeView.setText(badgePrefix + patchStr);
-            badgeView.setTextSize(11);
-            badgeView.setTypeface(Typeface.DEFAULT_BOLD);
-            badgeView.setTextColor(isDev ? Color.parseColor("#E5A93C") : colPrimaryBtnBg);
-            badgeView.setPadding(dp(10, density), dp(4, density), dp(10, density), dp(4, density));
+            // App Identity Row (Icon + Title + Subtitle)
+            LinearLayout identityRow = new LinearLayout(activity);
+            identityRow.setOrientation(LinearLayout.HORIZONTAL);
+            identityRow.setGravity(Gravity.CENTER_VERTICAL);
+            LinearLayout.LayoutParams idRowLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            idRowLp.topMargin = dp(12, density);
+            identityRow.setLayoutParams(idRowLp);
 
-            GradientDrawable badgeBg = new GradientDrawable();
-            badgeBg.setColor(colSurface);
-            badgeBg.setCornerRadius(dp(12, density));
-            badgeBg.setStroke(1, colSurfaceBorder);
-            badgeView.setBackground(badgeBg);
+            // Left Icon Squircle Box
+            TextView iconBox = new TextView(activity);
+            iconBox.setText(emoji(0x1F680));
+            iconBox.setTextSize(20);
+            iconBox.setGravity(Gravity.CENTER);
+            LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams(dp(44, density), dp(44, density));
+            iconLp.rightMargin = dp(12, density);
+            iconBox.setLayoutParams(iconLp);
 
-            LinearLayout.LayoutParams badgeLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            badgeLp.gravity = Gravity.START;
-            badgeLp.topMargin = dp(12, density);
-            badgeView.setLayoutParams(badgeLp);
-            headerLayout.addView(badgeView);
+            GradientDrawable iconBg = new GradientDrawable();
+            iconBg.setColor(colIconBg);
+            iconBg.setCornerRadius(dp(14, density));
+            iconBox.setBackground(iconBg);
+            identityRow.addView(iconBox);
 
-            // 2. Minimalist Clean Title
+            // Right Title and Subtitle
+            LinearLayout textBlock = new LinearLayout(activity);
+            textBlock.setOrientation(LinearLayout.VERTICAL);
+
             TextView titleView = new TextView(activity);
             titleView.setText(getString("title"));
             titleView.setTextColor(colTitle);
             titleView.setTypeface(Typeface.DEFAULT_BOLD);
-            titleView.setTextSize(19);
-            LinearLayout.LayoutParams titleLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            titleLp.topMargin = dp(6, density);
-            titleView.setLayoutParams(titleLp);
-            headerLayout.addView(titleView);
+            titleView.setTextSize(18);
+            textBlock.addView(titleView);
 
-            // 3. Compact Subtitle (Build & YouTube Version)
             TextView subView = new TextView(activity);
-            String verInfo = version.isEmpty() ? "" : "YouTube " + version + " • ";
-            subView.setText(verInfo + String.format(getString("subtitle_fmt"), tag));
+            String verText = version.isEmpty() ? "v" + tag : "v" + version;
+            subView.setText("YouTube Morphe • " + verText);
             subView.setTextColor(colSubtitle);
-            subView.setTextSize(13);
-            LinearLayout.LayoutParams subLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            subLp.topMargin = dp(3, density);
-            subView.setLayoutParams(subLp);
-            headerLayout.addView(subView);
+            subView.setTextSize(12);
+            textBlock.addView(subView);
 
+            identityRow.addView(textBlock);
+            headerLayout.addView(identityRow);
             sheet.addView(headerLayout);
 
-            // --- DEV / RELEASE TOGGLE ROW (Minimalist Switch) ---
-            SharedPreferences prefs = activity.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-            boolean currentNotifyDev = prefs.getBoolean(KEY_NOTIFY_DEV, true);
+            // --- INFO CONTAINER CARD (Patches Version + Build + Changelog Link) ---
+            LinearLayout infoCard = new LinearLayout(activity);
+            infoCard.setOrientation(LinearLayout.VERTICAL);
+            infoCard.setPadding(dp(14, density), dp(12, density), dp(14, density), dp(12, density));
 
-            LinearLayout toggleRow = new LinearLayout(activity);
-            toggleRow.setOrientation(LinearLayout.HORIZONTAL);
-            toggleRow.setGravity(Gravity.CENTER_VERTICAL);
-            toggleRow.setPadding(dp(14, density), dp(10, density), dp(14, density), dp(10, density));
+            GradientDrawable infoCardBg = new GradientDrawable();
+            infoCardBg.setColor(colSurface);
+            infoCardBg.setCornerRadius(dp(16, density));
+            infoCardBg.setStroke(1, colSurfaceBorder);
+            infoCard.setBackground(infoCardBg);
 
-            GradientDrawable toggleRowBg = new GradientDrawable();
-            toggleRowBg.setColor(colSurface);
-            toggleRowBg.setCornerRadius(dp(14, density));
-            toggleRowBg.setStroke(1, colSurfaceBorder);
-            toggleRow.setBackground(toggleRowBg);
+            LinearLayout.LayoutParams infoCardLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            infoCardLp.topMargin = dp(12, density);
+            infoCard.setLayoutParams(infoCardLp);
 
-            LinearLayout.LayoutParams toggleRowLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            toggleRowLp.topMargin = dp(14, density);
-            toggleRow.setLayoutParams(toggleRowLp);
+            // Info Row 1: Patch Version
+            if (!patchVersion.isEmpty()) {
+                LinearLayout patchRow = new LinearLayout(activity);
+                patchRow.setOrientation(LinearLayout.HORIZONTAL);
 
-            // Left text block: Title & Explanation
-            LinearLayout toggleTextLayout = new LinearLayout(activity);
-            toggleTextLayout.setOrientation(LinearLayout.VERTICAL);
-            LinearLayout.LayoutParams ttlLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.0f);
-            toggleTextLayout.setLayoutParams(ttlLp);
+                TextView patchLbl = new TextView(activity);
+                patchLbl.setText(getString("info_patch_label"));
+                patchLbl.setTextColor(colSubtitle);
+                patchLbl.setTextSize(12);
+                patchLbl.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.0f));
+                patchRow.addView(patchLbl);
 
-            TextView toggleTitle = new TextView(activity);
-            toggleTitle.setText(getString("dev_toggle_title"));
-            toggleTitle.setTextColor(colTitle);
-            toggleTitle.setTextSize(14);
-            toggleTitle.setTypeface(Typeface.DEFAULT_BOLD);
-            toggleTextLayout.addView(toggleTitle);
+                TextView patchVal = new TextView(activity);
+                patchVal.setText(patchVersion);
+                patchVal.setTextColor(colTitle);
+                patchVal.setTypeface(Typeface.DEFAULT_BOLD);
+                patchVal.setTextSize(12);
+                patchRow.addView(patchVal);
 
-            TextView toggleSub = new TextView(activity);
-            toggleSub.setText(getString("dev_toggle_sub"));
-            toggleSub.setTextColor(colSubtitle);
-            toggleSub.setTextSize(11);
-            toggleTextLayout.addView(toggleSub);
-
-            toggleRow.addView(toggleTextLayout);
-
-            // Right: Custom Smooth Minimalist Switch
-            int switchW = dp(44, density);
-            int switchH = dp(24, density);
-            int thumbSize = dp(18, density);
-            int thumbMargin = dp(3, density);
-            int translationX = switchW - thumbSize - (thumbMargin * 2);
-
-            FrameLayout switchTrack = new FrameLayout(activity);
-            LinearLayout.LayoutParams trackLp = new LinearLayout.LayoutParams(switchW, switchH);
-            switchTrack.setLayoutParams(trackLp);
-
-            GradientDrawable trackBg = new GradientDrawable();
-            trackBg.setCornerRadius(switchH / 2.0f);
-            trackBg.setColor(currentNotifyDev ? colSwitchActive : colSwitchInactive);
-            switchTrack.setBackground(trackBg);
-
-            View thumb = new View(activity);
-            FrameLayout.LayoutParams thumbLp = new FrameLayout.LayoutParams(thumbSize, thumbSize);
-            thumbLp.gravity = Gravity.CENTER_VERTICAL;
-            thumbLp.leftMargin = thumbMargin;
-            thumb.setLayoutParams(thumbLp);
-
-            GradientDrawable thumbBg = new GradientDrawable();
-            thumbBg.setCornerRadius(thumbSize / 2.0f);
-            thumbBg.setColor(Color.WHITE);
-            thumb.setBackground(thumbBg);
-
-            if (currentNotifyDev) {
-                thumb.setTranslationX(translationX);
-            } else {
-                thumb.setTranslationX(0);
+                infoCard.addView(patchRow);
             }
 
-            switchTrack.addView(thumb);
-            toggleRow.addView(switchTrack);
+            // Info Row 2: Build Tag
+            LinearLayout buildRow = new LinearLayout(activity);
+            buildRow.setOrientation(LinearLayout.HORIZONTAL);
+            LinearLayout.LayoutParams buildRowLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            buildRowLp.topMargin = dp(4, density);
+            buildRow.setLayoutParams(buildRowLp);
 
-            // Toggle click listener (clicking either switch or row toggles state)
-            final boolean[] switchState = {currentNotifyDev};
-            View.OnClickListener toggleClick = v -> {
-                switchState[0] = !switchState[0];
-                boolean isChecked = switchState[0];
+            TextView buildLbl = new TextView(activity);
+            buildLbl.setText(getString("info_build_label"));
+            buildLbl.setTextColor(colSubtitle);
+            buildLbl.setTextSize(12);
+            buildLbl.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.0f));
+            buildRow.addView(buildLbl);
 
-                thumb.animate()
-                    .translationX(isChecked ? translationX : 0)
-                    .setDuration(160)
-                    .start();
+            TextView buildVal = new TextView(activity);
+            buildVal.setText(String.format(getString("subtitle_fmt"), tag));
+            buildVal.setTextColor(colTitle);
+            buildVal.setTypeface(Typeface.DEFAULT_BOLD);
+            buildVal.setTextSize(12);
+            buildRow.addView(buildVal);
 
-                trackBg.setColor(isChecked ? colSwitchActive : colSwitchInactive);
-                prefs.edit().putBoolean(KEY_NOTIFY_DEV, isChecked).apply();
-                showToast(activity, isChecked ? getString("toast_dev_on") : getString("toast_dev_off"));
-            };
-            toggleRow.setOnClickListener(toggleClick);
+            infoCard.addView(buildRow);
 
-            sheet.addView(toggleRow);
+            // Divider inside card
+            View cardDivider = new View(activity);
+            cardDivider.setBackgroundColor(colSurfaceBorder);
+            LinearLayout.LayoutParams cDivLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1, density));
+            cDivLp.topMargin = dp(8, density);
+            cDivLp.bottomMargin = dp(8, density);
+            cardDivider.setLayoutParams(cDivLp);
+            infoCard.addView(cardDivider);
 
-            // --- PRIMARY DOWNLOAD BUTTON (Sleek Pill) ---
+            // Info Row 3: Clickable Changelog Link to GitHub
+            TextView changelogBtn = new TextView(activity);
+            changelogBtn.setText(getString("info_changelog_btn"));
+            changelogBtn.setTextColor(colAccentText);
+            changelogBtn.setTextSize(12);
+            changelogBtn.setTypeface(Typeface.DEFAULT_BOLD);
+            changelogBtn.setOnClickListener(v -> {
+                dialog.dismiss();
+                openUrl(activity, changelogUrl);
+            });
+            infoCard.addView(changelogBtn);
+
+            sheet.addView(infoCard);
+
+            // --- PRIMARY DOWNLOAD BUTTON (44dp, filled pill) ---
             TextView downloadBtn = createButton(activity, getString("download_btn"), colPrimaryBtnBg, colPrimaryBtnText, density, 14);
             LinearLayout.LayoutParams dlLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44, density));
-            dlLp.topMargin = dp(14, density);
+            dlLp.topMargin = dp(12, density);
             downloadBtn.setLayoutParams(dlLp);
             downloadBtn.setOnClickListener(v -> {
                 dialog.dismiss();
@@ -643,16 +637,27 @@ public class JhcUpdateCheckPatch {
             });
             sheet.addView(downloadBtn);
 
-            // --- OBTAINIUM GROUP (Two balanced pill buttons side-by-side) ---
+            // --- OBTAINIUM SECTION WITH RETURNED LABEL ---
+            TextView obtainiumLabel = new TextView(activity);
+            obtainiumLabel.setText(getString("obtainium_label"));
+            obtainiumLabel.setTextColor(colSubtitle);
+            obtainiumLabel.setTextSize(11);
+            obtainiumLabel.setTypeface(Typeface.DEFAULT_BOLD);
+            LinearLayout.LayoutParams obLblLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            obLblLp.topMargin = dp(12, density);
+            obtainiumLabel.setLayoutParams(obLblLp);
+            sheet.addView(obtainiumLabel);
+
+            // Obtainium actions row: [ 📱 Открыть Obtainium ] [ ➕ Импорт профиля ]
             LinearLayout obtainiumRow = new LinearLayout(activity);
             obtainiumRow.setOrientation(LinearLayout.HORIZONTAL);
             LinearLayout.LayoutParams obRowLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            obRowLp.topMargin = dp(8, density);
+            obRowLp.topMargin = dp(6, density);
             obtainiumRow.setLayoutParams(obRowLp);
 
             // Left: Open Obtainium
-            TextView openObtainiumBtn = createSubButton(activity, getString("obtainium_open"), colSurface, colSurfaceBorder, colPillText, density);
-            LinearLayout.LayoutParams openLp = new LinearLayout.LayoutParams(0, dp(40, density), 1.0f);
+            TextView openObtainiumBtn = createSubButton(activity, getString("obtainium_open"), colButtonSurface, colButtonBorder, colButtonText, density);
+            LinearLayout.LayoutParams openLp = new LinearLayout.LayoutParams(0, dp(38, density), 1.0f);
             openLp.rightMargin = dp(6, density);
             openObtainiumBtn.setLayoutParams(openLp);
             openObtainiumBtn.setOnClickListener(v -> {
@@ -662,8 +667,8 @@ public class JhcUpdateCheckPatch {
             obtainiumRow.addView(openObtainiumBtn);
 
             // Right: Import profile
-            TextView importBtn = createSubButton(activity, getString("obtainium_import"), colSurface, colSurfaceBorder, colPrimaryBtnBg, density);
-            LinearLayout.LayoutParams importLp = new LinearLayout.LayoutParams(0, dp(40, density), 1.0f);
+            TextView importBtn = createSubButton(activity, getString("obtainium_import"), colButtonSurface, colButtonBorder, colAccentText, density);
+            LinearLayout.LayoutParams importLp = new LinearLayout.LayoutParams(0, dp(38, density), 1.0f);
             importBtn.setLayoutParams(importLp);
             importBtn.setOnClickListener(v -> {
                 dialog.dismiss();
@@ -679,11 +684,22 @@ public class JhcUpdateCheckPatch {
             obtainiumRow.addView(importBtn);
             sheet.addView(obtainiumRow);
 
-            // --- SNOOZE ROW (Clean Pill Chips: 1д, 3д, 7д, 1мес) ---
+            // --- SNOOZE SECTION WITH RETURNED LABEL ---
+            TextView snoozeLabel = new TextView(activity);
+            snoozeLabel.setText(getString("snooze_label"));
+            snoozeLabel.setTextColor(colSubtitle);
+            snoozeLabel.setTextSize(11);
+            snoozeLabel.setTypeface(Typeface.DEFAULT_BOLD);
+            LinearLayout.LayoutParams snoozeLblLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            snoozeLblLp.topMargin = dp(12, density);
+            snoozeLabel.setLayoutParams(snoozeLblLp);
+            sheet.addView(snoozeLabel);
+
+            // Snooze Chips: Clean values without repeating alarm clock icons
             HorizontalScrollView chipsScroll = new HorizontalScrollView(activity);
             chipsScroll.setHorizontalScrollBarEnabled(false);
             LinearLayout.LayoutParams scrollLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            scrollLp.topMargin = dp(14, density);
+            scrollLp.topMargin = dp(6, density);
             chipsScroll.setLayoutParams(scrollLp);
 
             LinearLayout chipsRow = new LinearLayout(activity);
@@ -692,7 +708,7 @@ public class JhcUpdateCheckPatch {
             int[] days = {1, 3, 7, 14, 30};
             for (int d : days) {
                 String label = d == 30 ? getString("chip_1mo") : d + " " + getString("chip_day");
-                TextView chip = createChip(activity, "⏰ " + label, colSurface, colSurfaceBorder, colSubtitle, density);
+                TextView chip = createChip(activity, label, colSurface, colSurfaceBorder, colSubtitle, density);
                 chip.setOnClickListener(v -> {
                     snooze(activity, tag, d);
                     dialog.dismiss();
@@ -703,17 +719,18 @@ public class JhcUpdateCheckPatch {
             chipsScroll.addView(chipsRow);
             sheet.addView(chipsScroll);
 
-            // --- DISMISS / SKIP BUTTON (Delicate Text Action) ---
+            // --- DISMISS / SKIP BUTTON ---
             TextView skipBtn = new TextView(activity);
             skipBtn.setText(getString("skip_btn"));
             skipBtn.setTextColor(colSubtitle);
-            skipBtn.setTextSize(13);
+            skipBtn.setTextSize(12);
             skipBtn.setGravity(Gravity.CENTER);
             LinearLayout.LayoutParams skipLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            skipLp.topMargin = dp(12, density);
+            skipLp.topMargin = dp(10, density);
             skipBtn.setLayoutParams(skipLp);
             skipBtn.setPadding(0, dp(4, density), 0, dp(4, density));
             skipBtn.setOnClickListener(v -> {
+                SharedPreferences prefs = activity.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
                 prefs.edit().putString(KEY_SKIPPED_TAG, tag).apply();
                 dialog.dismiss();
                 showToast(activity, String.format(getString("toast_skipped"), tag));
@@ -744,11 +761,13 @@ public class JhcUpdateCheckPatch {
                     sheetBg.setCornerRadius(dp(20, density));
                     sheet.setPadding(dp(20, density), dp(8, density), dp(20, density), dp(10, density));
                     handleLp.bottomMargin = dp(4, density);
-                    titleView.setTextSize(16);
-                    toggleRowLp.topMargin = dp(8, density);
+                    idRowLp.topMargin = dp(6, density);
+                    infoCardLp.topMargin = dp(8, density);
                     dlLp.topMargin = dp(8, density);
-                    obRowLp.topMargin = dp(6, density);
-                    scrollLp.topMargin = dp(8, density);
+                    obLblLp.topMargin = dp(8, density);
+                    obRowLp.topMargin = dp(4, density);
+                    snoozeLblLp.topMargin = dp(8, density);
+                    scrollLp.topMargin = dp(4, density);
                     skipLp.topMargin = dp(6, density);
                 } else {
                     FrameLayout.LayoutParams wrapLp = new FrameLayout.LayoutParams(
@@ -761,13 +780,15 @@ public class JhcUpdateCheckPatch {
                     float r = dp(24, density);
                     sheetBg.setCornerRadii(new float[]{r, r, r, r, 0, 0, 0, 0});
                     sheet.setPadding(dp(20, density), dp(10, density), dp(20, density), dp(24, density));
-                    handleLp.bottomMargin = dp(12, density);
-                    titleView.setTextSize(19);
-                    toggleRowLp.topMargin = dp(14, density);
-                    dlLp.topMargin = dp(14, density);
-                    obRowLp.topMargin = dp(8, density);
-                    scrollLp.topMargin = dp(14, density);
-                    skipLp.topMargin = dp(12, density);
+                    handleLp.bottomMargin = dp(10, density);
+                    idRowLp.topMargin = dp(12, density);
+                    infoCardLp.topMargin = dp(12, density);
+                    dlLp.topMargin = dp(12, density);
+                    obLblLp.topMargin = dp(12, density);
+                    obRowLp.topMargin = dp(6, density);
+                    snoozeLblLp.topMargin = dp(12, density);
+                    scrollLp.topMargin = dp(6, density);
+                    skipLp.topMargin = dp(10, density);
                 }
             });
 
@@ -876,7 +897,7 @@ public class JhcUpdateCheckPatch {
 
         GradientDrawable gd = new GradientDrawable();
         gd.setColor(bgColor);
-        gd.setCornerRadius(dp(14, density));
+        gd.setCornerRadius(dp(10, density));
         gd.setStroke(1, borderColor);
         tv.setBackground(gd);
 
@@ -890,7 +911,7 @@ public class JhcUpdateCheckPatch {
         TextView tv = new TextView(context);
         tv.setText(text);
         tv.setTextColor(textColor);
-        tv.setTextSize(13);
+        tv.setTextSize(12);
         tv.setTypeface(Typeface.DEFAULT_BOLD);
         tv.setGravity(Gravity.CENTER);
         tv.setPadding(dp(8, density), dp(8, density), dp(8, density), dp(8, density));
@@ -916,15 +937,14 @@ public class JhcUpdateCheckPatch {
             switch (key) {
                 case "title": return "Доступне оновлення";
                 case "subtitle_fmt": return "Збірка %s";
-                case "badge_dev": return "⚡ DEV";
-                case "badge_release": return "✨ Реліз";
-                case "dev_toggle_title": return "DEV-патчі";
-                case "dev_toggle_sub": return "Сповіщати про тестові версії";
-                case "toast_dev_on": return "Сповіщення про DEV-патчі увімкнено";
-                case "toast_dev_off": return "Лише стабільні релізи";
+                case "info_patch_label": return "Версія патчів:";
+                case "info_build_label": return "Номер збірки:";
+                case "info_changelog_btn": return "🐙  Список змін на GitHub  ↗";
                 case "download_btn": return "⬇️  Завантажити APK";
-                case "obtainium_open": return emoji(0x1F4F1) + "  Obtainium";
-                case "obtainium_import": return "➕  Профіль";
+                case "obtainium_label": return "ОНОВЛЕННЯ ЧЕРЕЗ OBTAINIUM:";
+                case "obtainium_open": return emoji(0x1F4F1) + "  Відкрити Obtainium";
+                case "obtainium_import": return "➕  Імпорт профілю";
+                case "snooze_label": return "⏰  НАГАДАТИ ПІЗНІШЕ:";
                 case "chip_day": return "дн";
                 case "chip_1mo": return "1 міс";
                 case "skip_btn": return "Пропустити цю версію";
@@ -938,15 +958,14 @@ public class JhcUpdateCheckPatch {
             switch (key) {
                 case "title": return "Доступно обновление";
                 case "subtitle_fmt": return "Сборка %s";
-                case "badge_dev": return "⚡ DEV";
-                case "badge_release": return "✨ Релиз";
-                case "dev_toggle_title": return "DEV-патчи";
-                case "dev_toggle_sub": return "Уведомлять о тестовых версиях";
-                case "toast_dev_on": return "Уведомления о DEV-патчах включены";
-                case "toast_dev_off": return "Только стабильные релизы";
+                case "info_patch_label": return "Версия патчей:";
+                case "info_build_label": return "Номер сборки:";
+                case "info_changelog_btn": return "🐙  Список изменений на GitHub  ↗";
                 case "download_btn": return "⬇️  Скачать APK";
-                case "obtainium_open": return emoji(0x1F4F1) + "  Obtainium";
-                case "obtainium_import": return "➕  Профиль";
+                case "obtainium_label": return "ОБНОВЛЕНИЕ ЧЕРЕЗ OBTAINIUM:";
+                case "obtainium_open": return emoji(0x1F4F1) + "  Открыть Obtainium";
+                case "obtainium_import": return "➕  Импорт профиля";
+                case "snooze_label": return "⏰  НАПОМНИТЬ ПОЗЖЕ:";
                 case "chip_day": return "дн";
                 case "chip_1mo": return "1 мес";
                 case "skip_btn": return "Пропустить эту версию";
@@ -960,15 +979,14 @@ public class JhcUpdateCheckPatch {
             switch (key) {
                 case "title": return "Actualización disponible";
                 case "subtitle_fmt": return "Versión %s";
-                case "badge_dev": return "⚡ DEV";
-                case "badge_release": return "✨ Release";
-                case "dev_toggle_title": return "Parches DEV";
-                case "dev_toggle_sub": return "Avisar sobre versiones de prueba";
-                case "toast_dev_on": return "Notificaciones DEV activadas";
-                case "toast_dev_off": return "Solo versiones estables";
+                case "info_patch_label": return "Versión de parches:";
+                case "info_build_label": return "Número de build:";
+                case "info_changelog_btn": return "🐙  Registro de cambios en GitHub  ↗";
                 case "download_btn": return "⬇️  Descargar APK";
-                case "obtainium_open": return emoji(0x1F4F1) + "  Obtainium";
-                case "obtainium_import": return "➕  Perfil";
+                case "obtainium_label": return "ACTUALIZACIÓN VÍA OBTAINIUM:";
+                case "obtainium_open": return emoji(0x1F4F1) + "  Abrir Obtainium";
+                case "obtainium_import": return "➕  Importar perfil";
+                case "snooze_label": return "⏰  RECORDAR MÁS TARDE:";
                 case "chip_day": return "d";
                 case "chip_1mo": return "1 mes";
                 case "skip_btn": return "Omitir esta versión";
@@ -982,15 +1000,14 @@ public class JhcUpdateCheckPatch {
             switch (key) {
                 case "title": return "Update verfügbar";
                 case "subtitle_fmt": return "Build %s";
-                case "badge_dev": return "⚡ DEV";
-                case "badge_release": return "✨ Release";
-                case "dev_toggle_title": return "DEV-Patches";
-                case "dev_toggle_sub": return "Über Testversionen benachrichtigen";
-                case "toast_dev_on": return "DEV-Benachrichtigungen aktiviert";
-                case "toast_dev_off": return "Nur stabile Versionen";
+                case "info_patch_label": return "Patch-Version:";
+                case "info_build_label": return "Build-Nummer:";
+                case "info_changelog_btn": return "🐙  Changelog auf GitHub  ↗";
                 case "download_btn": return "⬇️  APK herunterladen";
-                case "obtainium_open": return emoji(0x1F4F1) + "  Obtainium";
-                case "obtainium_import": return "➕  Profil";
+                case "obtainium_label": return "AKTUALISIERUNG ÜBER OBTAINIUM:";
+                case "obtainium_open": return emoji(0x1F4F1) + "  Obtainium öffnen";
+                case "obtainium_import": return "➕  Profil importieren";
+                case "snooze_label": return "⏰  SPÄTER ERINNERN:";
                 case "chip_day": return "T";
                 case "chip_1mo": return "1 Monat";
                 case "skip_btn": return "Diese Version überspringen";
@@ -1004,15 +1021,14 @@ public class JhcUpdateCheckPatch {
         switch (key) {
             case "title": return "Update Available";
             case "subtitle_fmt": return "Build %s";
-            case "badge_dev": return "⚡ DEV";
-            case "badge_release": return "✨ Release";
-            case "dev_toggle_title": return "DEV Patches";
-            case "dev_toggle_sub": return "Notify about pre-release builds";
-            case "toast_dev_on": return "DEV notifications enabled";
-            case "toast_dev_off": return "Stable releases only";
+            case "info_patch_label": return "Patches version:";
+            case "info_build_label": return "Build number:";
+            case "info_changelog_btn": return "🐙  Changelog on GitHub  ↗";
             case "download_btn": return "⬇️  Download APK";
-            case "obtainium_open": return emoji(0x1F4F1) + "  Obtainium";
-            case "obtainium_import": return "➕  Profile";
+            case "obtainium_label": return "UPDATE VIA OBTAINIUM:";
+            case "obtainium_open": return emoji(0x1F4F1) + "  Open Obtainium";
+            case "obtainium_import": return "➕  Import Profile";
+            case "snooze_label": return "⏰  REMIND ME LATER:";
             case "chip_day": return "d";
             case "chip_1mo": return "1 mo";
             case "skip_btn": return "Skip this version";
