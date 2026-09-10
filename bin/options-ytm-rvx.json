@@ -2,6 +2,7 @@
   {
     "patches": {
       "GmsCore support": {
+        "enabled": true,
         "options": {
           "packageNameYouTubeMusic": "anddea.youtube.music.test"
         }
