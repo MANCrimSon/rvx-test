@@ -78,12 +78,12 @@ public class JhcUpdateCheckPatch {
 
     // 10 seconds delay on normal startup
     private static final long STARTUP_DELAY_MS = 10000L;
-    // 0 during testing
-    private static final long API_COOLDOWN_MS = 0L;
-    // 0 for test builds
-    private static final int EMBEDDED_BUILD_CODE = 0;
-    // TRUE: always show dialog on every launch for testing (ignores snooze/skip)
-    private static final boolean FORCE_TEST_ALWAYS_SHOW = true;
+    // 24 hours cooldown between automatic background checks
+    private static final long API_COOLDOWN_MS = 86_400_000L;
+    // 26 for this build (so Release 27 will be detected as new update)
+    private static final int EMBEDDED_BUILD_CODE = 26;
+    // FALSE: dialog only appears if new update is available (and cooldown/snooze respected)
+    private static final boolean FORCE_TEST_ALWAYS_SHOW = false;
 
     public static void checkUpdate(Context context) {
         if (context == null) return;
@@ -258,74 +258,156 @@ public class JhcUpdateCheckPatch {
             Context appContext = context.getApplicationContext();
             SharedPreferences prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
 
-            HttpURLConnection conn = (HttpURLConnection) new URL(REPO_RELEASES_API).openConnection();
-            conn.setRequestMethod("GET");
-            conn.setRequestProperty("Accept", "application/vnd.github+json");
-            conn.setRequestProperty("User-Agent", "Crimson-Update-Checker");
-            conn.setConnectTimeout(8000);
-            conn.setReadTimeout(8000);
-
-            int code = conn.getResponseCode();
-            if (code != 200) {
-                Log.w(TAG, "GitHub API returned HTTP " + code);
-                conn.disconnect();
-                return;
-            }
-
-            BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-            StringBuilder sb = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) {
-                sb.append(line);
-            }
-            reader.close();
-            conn.disconnect();
-
-            prefs.edit().putLong(KEY_LAST_CHECK_TIME, System.currentTimeMillis()).apply();
-
-            JSONArray releases = new JSONArray(sb.toString());
-            if (releases.length() == 0) return;
-
             String targetTag = null;
             String downloadUrl = null;
             String appVersion = "";
             String patchVersion = "";
             String changelogUrl = null;
 
-            for (int i = 0; i < releases.length(); i++) {
-                JSONObject rel = releases.getJSONObject(i);
-                String tag = rel.optString("tag_name", "").trim();
-                if (tag.isEmpty()) continue;
+            // Channel 1: GitHub JSON API
+            try {
+                HttpURLConnection conn = (HttpURLConnection) new URL(REPO_RELEASES_API).openConnection();
+                conn.setRequestMethod("GET");
+                conn.setRequestProperty("Accept", "application/vnd.github+json");
+                conn.setRequestProperty("User-Agent", "Crimson-Update-Checker");
+                conn.setConnectTimeout(6000);
+                conn.setReadTimeout(6000);
 
-                JSONArray assets = rel.optJSONArray("assets");
-                if (assets == null || assets.length() == 0) continue;
+                int code = conn.getResponseCode();
+                if (code == 200) {
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                    StringBuilder sb = new StringBuilder();
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        sb.append(line);
+                    }
+                    reader.close();
+                    conn.disconnect();
 
-                String matchedUrl = findMatchingAsset(assets);
-                if (matchedUrl == null) continue;
+                    JSONArray releases = new JSONArray(sb.toString());
+                    for (int i = 0; i < releases.length(); i++) {
+                        JSONObject rel = releases.getJSONObject(i);
+                        String tag = rel.optString("tag_name", "").trim();
+                        if (tag.isEmpty()) continue;
 
-                String body = rel.optString("body", "");
-                String patchVer = extractPatchVersion(body);
+                        JSONArray assets = rel.optJSONArray("assets");
+                        if (assets == null || assets.length() == 0) continue;
 
-                targetTag = tag;
-                downloadUrl = matchedUrl;
-                appVersion = extractVersionFromUrl(matchedUrl);
-                patchVersion = patchVer;
+                        String matchedUrl = findMatchingAsset(assets);
+                        if (matchedUrl == null) continue;
 
-                // Extract changelog link: prefer upstream patch changelog if present, fallback to GitHub release page
-                String extractedChangelog = extractChangelogUrl(body, patchVer);
-                if (extractedChangelog != null && !extractedChangelog.isEmpty()) {
-                    changelogUrl = extractedChangelog;
+                        String body = rel.optString("body", "");
+                        String patchVer = extractPatchVersion(body);
+
+                        targetTag = tag;
+                        downloadUrl = matchedUrl;
+                        appVersion = extractVersionFromUrl(matchedUrl);
+                        patchVersion = patchVer;
+
+                        String extractedChangelog = extractChangelogUrl(body, patchVer);
+                        if (extractedChangelog != null && !extractedChangelog.isEmpty()) {
+                            changelogUrl = extractedChangelog;
+                        } else {
+                            changelogUrl = rel.optString("html_url", "https://github.com/" + REPO_OWNER_NAME + "/releases/tag/" + tag);
+                        }
+                        break;
+                    }
                 } else {
-                    changelogUrl = rel.optString("html_url", "https://github.com/" + REPO_OWNER_NAME + "/releases/tag/" + tag);
+                    Log.w(TAG, "GitHub API returned " + code + ", falling back to releases.atom");
+                    conn.disconnect();
                 }
-                break;
+            } catch (Throwable t) {
+                Log.w(TAG, "GitHub API check failed, falling back to releases.atom", t);
             }
 
+            // Channel 2 (Backup without rate limits): releases.atom + expanded_assets
             if (targetTag == null || downloadUrl == null) {
-                Log.d(TAG, "No matching APK found in releases");
+                try {
+                    String atomUrl = "https://github.com/" + REPO_OWNER_NAME + "/releases.atom";
+                    HttpURLConnection atomConn = (HttpURLConnection) new URL(atomUrl).openConnection();
+                    atomConn.setRequestMethod("GET");
+                    atomConn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+                    atomConn.setConnectTimeout(6000);
+                    atomConn.setReadTimeout(6000);
+
+                    if (atomConn.getResponseCode() == 200) {
+                        BufferedReader reader = new BufferedReader(new InputStreamReader(atomConn.getInputStream()));
+                        StringBuilder sb = new StringBuilder();
+                        String line;
+                        while ((line = reader.readLine()) != null) {
+                            sb.append(line);
+                        }
+                        reader.close();
+                        atomConn.disconnect();
+
+                        String atom = sb.toString();
+                        Matcher tagMatcher = Pattern.compile("/releases/tag/([^\"'\\s]+)").matcher(atom);
+                        if (tagMatcher.find()) {
+                            targetTag = tagMatcher.group(1);
+                        }
+                        Matcher verMatcher = Pattern.compile("YouTube-Morphe:\\s*([0-9.]+)").matcher(atom);
+                        if (verMatcher.find()) {
+                            appVersion = verMatcher.group(1);
+                        } else {
+                            appVersion = "21.13.164";
+                        }
+                        Matcher patchMatcher = Pattern.compile("patches-([0-9a-zA-Z._-]+)\\.mpp").matcher(atom);
+                        if (patchMatcher.find()) {
+                            patchVersion = patchMatcher.group(1);
+                        }
+                        if (targetTag != null) {
+                            // Try expanded_assets for direct APK link
+                            try {
+                                String assetsUrl = "https://github.com/" + REPO_OWNER_NAME + "/releases/expanded_assets/" + targetTag;
+                                HttpURLConnection expConn = (HttpURLConnection) new URL(assetsUrl).openConnection();
+                                expConn.setRequestMethod("GET");
+                                expConn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+                                expConn.setConnectTimeout(5000);
+                                expConn.setReadTimeout(5000);
+                                if (expConn.getResponseCode() == 200) {
+                                    BufferedReader expReader = new BufferedReader(new InputStreamReader(expConn.getInputStream()));
+                                    StringBuilder expSb = new StringBuilder();
+                                    String expLine;
+                                    while ((expLine = expReader.readLine()) != null) expSb.append(expLine);
+                                    expReader.close();
+                                    expConn.disconnect();
+                                    Matcher apkMatcher = Pattern.compile("href=\"([^\"]*releases/download/[^\"]+\\.apk)\"").matcher(expSb.toString());
+                                    if (apkMatcher.find()) {
+                                        String foundHref = apkMatcher.group(1);
+                                        downloadUrl = foundHref.startsWith("/") ? ("https://github.com" + foundHref) : foundHref;
+                                    }
+                                } else {
+                                    expConn.disconnect();
+                                }
+                            } catch (Throwable ignored) {}
+
+                            if (downloadUrl == null) {
+                                downloadUrl = "https://github.com/" + REPO_OWNER_NAME + "/releases/download/" + targetTag + "/youtube-morphe-v" + appVersion + "-all.apk";
+                            }
+
+                            Matcher chMatcher = Pattern.compile("href=\"(https://github\\.com/[^\"]*patches/releases/tag/[^\"]+)\"").matcher(atom);
+                            if (chMatcher.find()) {
+                                changelogUrl = chMatcher.group(1);
+                            } else {
+                                changelogUrl = "https://github.com/" + REPO_OWNER_NAME + "/releases/tag/" + targetTag;
+                            }
+                        }
+                        Log.d(TAG, "Extracted release from releases.atom successfully! Tag=" + targetTag);
+                    } else {
+                        atomConn.disconnect();
+                    }
+                } catch (Throwable t) {
+                    Log.e(TAG, "releases.atom fallback failed", t);
+                }
+            }
+
+            prefs.edit().putLong(KEY_LAST_CHECK_TIME, System.currentTimeMillis()).apply();
+
+            if (targetTag == null || downloadUrl == null) {
+                Log.d(TAG, "No matching APK found in releases or network unreachable");
                 if (manualCheck && context instanceof Activity) {
                     ((Activity) context).runOnUiThread(() -> 
-                        showToast(context, getString("toast_already_latest")));
+                        showToast(context, getString("toast_check_failed")));
                 }
                 return;
             }
@@ -728,18 +810,37 @@ public class JhcUpdateCheckPatch {
             idRowLp.topMargin = dp(12, density);
             identityRow.setLayoutParams(idRowLp);
 
-            TextView iconBox = new TextView(activity);
-            iconBox.setText(emoji(0x1F680));
-            iconBox.setTextSize(20);
-            iconBox.setGravity(Gravity.CENTER);
+            View iconBox;
+            Drawable appIcon = null;
+            try {
+                appIcon = activity.getPackageManager().getApplicationIcon(activity.getPackageName());
+            } catch (Throwable ignored) {}
+
+            if (appIcon != null) {
+                android.widget.ImageView iv = new android.widget.ImageView(activity);
+                iv.setImageDrawable(appIcon);
+                iv.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+                GradientDrawable iconBg = new GradientDrawable();
+                iconBg.setColor(colIconBg);
+                iconBg.setCornerRadius(dp(14, density));
+                iv.setBackground(iconBg);
+                iv.setPadding(dp(4, density), dp(4, density), dp(4, density), dp(4, density));
+                iconBox = iv;
+            } else {
+                TextView tv = new TextView(activity);
+                tv.setText(emoji(0x1F680));
+                tv.setTextSize(22);
+                tv.setGravity(Gravity.CENTER);
+                GradientDrawable iconBg = new GradientDrawable();
+                iconBg.setColor(colIconBg);
+                iconBg.setCornerRadius(dp(14, density));
+                tv.setBackground(iconBg);
+                iconBox = tv;
+            }
+
             LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams(dp(44, density), dp(44, density));
             iconLp.rightMargin = dp(12, density);
             iconBox.setLayoutParams(iconLp);
-
-            GradientDrawable iconBg = new GradientDrawable();
-            iconBg.setColor(colIconBg);
-            iconBg.setCornerRadius(dp(14, density));
-            iconBox.setBackground(iconBg);
             identityRow.addView(iconBox);
 
             LinearLayout textBlock = new LinearLayout(activity);
@@ -1322,6 +1423,7 @@ public class JhcUpdateCheckPatch {
                 case "shortcut_long_label": return "🔄  Оновити патчі";
                 case "toast_checking_updates": return "Перевірка оновлень патчів...";
                 case "toast_already_latest": return "У вас встановлені найновіші патчі";
+                case "toast_check_failed": return "Не вдалося перевірити оновлення. Перевірте мережу";
             }
         }
         // Russian, Belarusian, Kazakh
@@ -1356,6 +1458,7 @@ public class JhcUpdateCheckPatch {
                 case "shortcut_long_label": return "🔄  Обновить патчи";
                 case "toast_checking_updates": return "Проверка обновлений патчей...";
                 case "toast_already_latest": return "У вас установлены актуальные патчи";
+                case "toast_check_failed": return "Не удалось проверить обновления. Проверьте сеть";
             }
         } 
         // Spanish
@@ -1390,6 +1493,7 @@ public class JhcUpdateCheckPatch {
                 case "shortcut_long_label": return "🔄  Actualizar parches";
                 case "toast_checking_updates": return "Buscando actualizaciones de parches...";
                 case "toast_already_latest": return "Tienes instalados los parches más recientes";
+                case "toast_check_failed": return "Error al buscar actualizaciones. Comprueba la red";
             }
         } 
         // German
@@ -1424,6 +1528,7 @@ public class JhcUpdateCheckPatch {
                 case "shortcut_long_label": return "🔄  Patches aktualisieren";
                 case "toast_checking_updates": return "Suche nach Patch-Updates...";
                 case "toast_already_latest": return "Sie haben die neuesten Patches installiert";
+                case "toast_check_failed": return "Fehler bei der Update-Suche. Netzwerk prüfen";
             }
         }
 
@@ -1457,6 +1562,7 @@ public class JhcUpdateCheckPatch {
             case "shortcut_long_label": return "🔄  Update Patches";
             case "toast_checking_updates": return "Checking for patch updates...";
             case "toast_already_latest": return "You have the latest patches installed";
+            case "toast_check_failed": return "Failed to check for updates. Check your network";
             case "hint_shortcut": return "💡 Long press the home screen icon to check manually";
             default: return key;
         }
