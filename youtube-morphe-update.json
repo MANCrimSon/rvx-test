@@ -1,6 +1,6 @@
 {
-  "version": "v21.13.164 (patches dualvot.8.5.2.mpp)",
-  "versionCode": 2026091501,
-  "zipUrl": "https://github.com/MANCrimSon/rvx-test/releases/download/39/youtube-morphe-module-v21.13.164-all.zip",
+  "version": "v21.16.256 (p1.45.0-dev.2-dualvot.8.5.3 b40)",
+  "versionCode": 2026092201,
+  "zipUrl": "https://github.com/MANCrimSon/rvx-test/releases/download/40/youtube-morphe-module-v21.16.256-all.zip",
   "changelog": "https://raw.githubusercontent.com/MANCrimSon/rvx-test/update/youtube-morphe-changelog.md"
 }
