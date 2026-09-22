@@ -1,6 +1,6 @@
 ## YouTube Morphe
-* **Version:** v21.16.256 (p1.45.0-dev.2-dualvot.8.5.3 b40)
-* **Release:** [#40](https://github.com/MANCrimSon/rvx-test/releases/tag/40)
+* **Version:** v21.16.256 (p1.45.0-dev.2-dualvot.8.5.3 b41)
+* **Release:** [#41](https://github.com/MANCrimSon/rvx-test/releases/tag/41)
 
 ### Release Notes:
 YouTube-Morphe: 21.16.256  
